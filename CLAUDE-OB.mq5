@@ -38,10 +38,10 @@
 //|  · [F7] Daily loss streak guard: InpMaxDailyLosses              |
 //+------------------------------------------------------------------+
 #property copyright "ORB SMC PRO System"
-#property version "6.23"
+#property version "6.25"
 #property description "Full ORB + SMC 9-Step | Pivot | Volume Profile | All Pairs"
 
-#define EA_VERSION "6.23" // single source of truth — keep in sync with #property version above
+#define EA_VERSION "6.25" // single source of truth — keep in sync with #property version above
 
 #include <Trade\Trade.mqh>
 #include <Trade\PositionInfo.mqh>
@@ -424,7 +424,7 @@ input int InpEQLookback = 100;                                             // Ba
 input color InpClrEQH = C'220,140,0';                                     // EQH line color
 input color InpClrEQL = C'0,170,220';                                     // EQL line color
 
-input group "━━━━━━━━━ EA CONFIG ━━━━━━━━━" input long InpMagic = "";
+input group "━━━━━━━━━ EA CONFIG ━━━━━━━━━" input long InpMagic = 109823;
 input bool InpAlerts = true;
 input bool InpPush = false;
 input bool InpLogging = true;
@@ -719,12 +719,6 @@ int OnInit()
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-// Build GlobalVariable key prefix for a session (max 64 chars enforced)
-string GKey(int s, string field)
-  {
-   return "ORB_" + StringSubstr(_Symbol, 0, 8) + "_S" + string(s) + "_" + field;
-  }
-
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
@@ -4001,19 +3995,36 @@ void ManagePendingOR(int sess)
       return;
      }
    ENUM_BIAS trendBias = GetEntryBiasForLogic();
-//Print(EnumToString(trendBias));
-//if(trendBias == BIAS_NEUTRAL)
-//  {
-//   CancelPendingOR(sess, "daily/HTF bias neutral");
-//   return;
-//  }
-   double pricex = iClose(_Symbol,_Period,1);
    double atr = GetATR(1);
    double orH = GetSessORH(sess), orL = GetSessORL(sess);
    double buf = atr * InpPendingOR_Buffer;
 
-   ENUM_ORDER_TYPE wantType = alertBuy[sess] ? ORDER_TYPE_BUY_LIMIT : alertSell[sess] ? ORDER_TYPE_SELL_LIMIT : NULL;
-   if(wantType==NULL) return;
+   ENUM_ORDER_TYPE wantType = WRONG_VALUE;
+   bool isBuy = false;
+   if(alertBuy[sess] || GetBkUp(sess) || (InpUseDailyBias && dailyBias == BIAS_BULLISH))
+     {
+      isBuy = true;
+      wantType = (InpPendingType == PENDING_LIMIT) ? ORDER_TYPE_BUY_LIMIT : ORDER_TYPE_BUY_STOP;
+     }
+   else if(alertSell[sess] || GetBkDn(sess) || (InpUseDailyBias && dailyBias == BIAS_BEARISH))
+     {
+      isBuy = false;
+      wantType = (InpPendingType == PENDING_LIMIT) ? ORDER_TYPE_SELL_LIMIT : ORDER_TYPE_SELL_STOP;
+     }
+   else if(trendBias == BIAS_BULLISH)
+     {
+      isBuy = true;
+      wantType = (InpPendingType == PENDING_LIMIT) ? ORDER_TYPE_BUY_LIMIT : ORDER_TYPE_BUY_STOP;
+     }
+   else if(trendBias == BIAS_BEARISH)
+     {
+      isBuy = false;
+      wantType = (InpPendingType == PENDING_LIMIT) ? ORDER_TYPE_SELL_LIMIT : ORDER_TYPE_SELL_STOP;
+     }
+
+   if(wantType == WRONG_VALUE)
+      return;
+
 // 2. Already have a live order for this session — confirm it still matches the wanted
 //    direction (bias can flip on a new HTF/daily bar); otherwise cancel and re-place below.
    if(pendingORTicket[sess] != 0)
@@ -4028,21 +4039,18 @@ void ManagePendingOR(int sess)
      }
 // 3. Nothing placed yet — respect the same single-trade-slot rule as every other entry path.
    if(HasOpenOrPendingTrade())
-     {
-
       return;
-     }
-   ;
+
    if(atr <= 0 || orH <= 0 || orL <= 0 || orH <= orL)
       return;
 
-   double price = (wantType == ORDER_TYPE_BUY_STOP || wantType==ORDER_TYPE_BUY_LIMIT) ? orH + buf : orL - buf;
+   double price = (InpPendingType == PENDING_LIMIT) ? (isBuy ? orL + buf : orH - buf) : (isBuy ? orH + buf : orL - buf);
    double slDist, tpDist;
-   CalcSLTPDist(sess, (wantType == ORDER_TYPE_BUY_STOP) ? ORDER_TYPE_BUY : ORDER_TYPE_SELL,
+   CalcSLTPDist(sess, isBuy ? ORDER_TYPE_BUY : ORDER_TYPE_SELL,
                 price, atr, orH, orL, slDist, tpDist);
    int digs = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
    double sl, tp;
-   if(wantType == ORDER_TYPE_BUY_STOP || wantType==ORDER_TYPE_BUY_LIMIT)
+   if(isBuy)
      {
       sl = NormalizeDouble(price - slDist, digs);
       tp = NormalizeDouble(price + tpDist, digs);
@@ -4053,28 +4061,17 @@ void ManagePendingOR(int sess)
       tp = NormalizeDouble(price - tpDist, digs);
      }
    double lot = CalcRiskLot(slDist);
-   string dir = (wantType == ORDER_TYPE_BUY_STOP) ? "BUY "+EnumToString(InpPendingType) : "SELLORDER"+EnumToString(InpPendingType);
+   string dir = isBuy ? "BUY_" + EnumToString(InpPendingType) : "SELL_" + EnumToString(InpPendingType);
    string cmt = "ORB_SMC_" + SESS_NAME[sess] + "_" + dir;
-   bool ok;
+   bool ok = false;
    if(wantType == ORDER_TYPE_BUY_STOP)
-     {
       ok = Trade.BuyStop(lot, price, _Symbol, sl, tp, ORDER_TIME_GTC, 0, cmt);
-     }
-   else
-      if(wantType==ORDER_TYPE_BUY_LIMIT)
-        {
-         ok = Trade.BuyLimit(lot, price, _Symbol, sl, tp, ORDER_TIME_GTC, 0, cmt);
-        }
-      else
-         if(wantType==ORDER_TYPE_SELL_LIMIT)
-           {
-            ok = Trade.SellLimit(lot, price, _Symbol, sl, tp, ORDER_TIME_GTC, 0, cmt);
-           }
-         else
-            if(wantType==ORDER_TYPE_SELL_STOP)
-              {
-               ok = Trade.SellStop(lot, price, _Symbol, sl, tp, ORDER_TIME_GTC, 0, cmt);
-              }
+   else if(wantType == ORDER_TYPE_BUY_LIMIT)
+      ok = Trade.BuyLimit(lot, price, _Symbol, sl, tp, ORDER_TIME_GTC, 0, cmt);
+   else if(wantType == ORDER_TYPE_SELL_LIMIT)
+      ok = Trade.SellLimit(lot, price, _Symbol, sl, tp, ORDER_TIME_GTC, 0, cmt);
+   else if(wantType == ORDER_TYPE_SELL_STOP)
+      ok = Trade.SellStop(lot, price, _Symbol, sl, tp, ORDER_TIME_GTC, 0, cmt);
 
    if(ok)
      {
@@ -4679,35 +4676,6 @@ bool CheckConfirmationMode(int sess)
   }
 
 //+------------------------------------------------------------------+
-// Check Daily Pivot confluence
-//+------------------------------------------------------------------+
-bool IsPriceNearPivot(double price, double pivotLevel, double tolerance)
-  {
-   double atr = GetATR(1);
-   if(atr <= 0)
-      return false;
-   tolerance = MathMax(tolerance, atr * 0.02); // Min tolerance
-   return MathAbs(price - pivotLevel) <= tolerance;
-  }
-
-//+------------------------------------------------------------------+
-// Check if entry has Daily Pivot confluence
-//+------------------------------------------------------------------+
-bool HasPivotConfluence(int sess)
-  {
-   if(ppPP <= 0 && ppR1 <= 0 && ppS1 <= 0)
-      return true; // No pivots yet, don't block entry
-   double atr = GetATR(1);
-   double tolerance = (atr > 0) ? MathMax(atr * 0.05, atr * 0.02) : _Point * 10;
-   bool bullishDir = UsesSMC(sess) ? setupBull[sess] : GetBkUp(sess);
-   double price = bullishDir ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
-// Bullish entry: stronger if near S1 or PP (support bounce)
-   if(bullishDir)
-      return IsPriceNearPivot(price, ppS1, tolerance) || IsPriceNearPivot(price, ppPP, tolerance);
-// Bearish entry: stronger if near R1 or PP (resistance bounce)
-   return IsPriceNearPivot(price, ppR1, tolerance) || IsPriceNearPivot(price, ppPP, tolerance);
-  }
-
 //============================================================
 // MODULE: NEWS FILTER with Dynamic State Reset
 //============================================================
@@ -7525,21 +7493,6 @@ datetime GetSessStart(int s)
          return londonStart;
       default:
          return nyStart;
-     }
-  }
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-string GetSessTimeStr(int s)
-  {
-   switch(s)
-     {
-      case SESS_ASIA:
-         return StringFormat("%02d:%02d UTC", InpAsiaH_Start, InpAsiaM_Start);
-      case SESS_LONDON:
-         return StringFormat("%02d:%02d UTC", InpLondonH_S, InpLondonM_S);
-      default:
-         return InpNY_StockMode ? "14:30 UTC (NYSE)" : StringFormat("%02d:%02d UTC", InpNYH_S, InpNYM_S);
      }
   }
 //+------------------------------------------------------------------+
