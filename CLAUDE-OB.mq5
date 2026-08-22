@@ -4846,7 +4846,7 @@ void DrawPivotLine(string name, double price, string lbl, color clr, ENUM_LINE_S
    if(InpPivotLabel)
      {
       // Label on the right side with R/S level badge style
-      string badge = StringFormat(" %s  %s", lbl, DoubleToString(price, _Digits));
+      string badge = StringFormat(" [%s] %s", lbl, DoubleToString(price, _Digits));
       DrawTextObj("PP_LBL_" + lbl, t2 - (datetime)(PeriodSeconds(ORBTF) * 4), price, badge, clr, 10);
      }
   }
@@ -4896,15 +4896,15 @@ void DrawEQHL()
       ENUM_LINE_STYLE ls = swept ? STYLE_DOT : STYLE_DASH;
       // Line from older swing to right edge — dotted + dimmed when swept
       DrawHLine(pfx + "_L", eqLevels[i].t1, extEnd, eqLevels[i].price, clr, ls, 1);
-      // Dot markers at each equal swing point
-      DrawTextObj(pfx + "_D1", eqLevels[i].t1, eqLevels[i].price, "●", clr, 8);
-      DrawTextObj(pfx + "_D2", eqLevels[i].t2, eqLevels[i].price, "●", clr, 8);
+      // Marker dots at each equal swing point
+      DrawTextObj(pfx + "_D1", eqLevels[i].t1, eqLevels[i].price, "*", clr, 8);
+      DrawTextObj(pfx + "_D2", eqLevels[i].t2, eqLevels[i].price, "*", clr, 8);
       // Label at right edge
       if(InpDrawLabels)
         {
          string badge = swept
-                        ? StringFormat(" ≡%s  %s  ✓SWEPT", tag, DoubleToString(eqLevels[i].price, _Digits))
-                        : StringFormat(" ≡%s  %s", tag, DoubleToString(eqLevels[i].price, _Digits));
+                        ? StringFormat(" [%s] %s [SWEPT]", tag, DoubleToString(eqLevels[i].price, _Digits))
+                        : StringFormat(" [%s] %s", tag, DoubleToString(eqLevels[i].price, _Digits));
          DrawTextObj(pfx + "_LBL", extEnd - (datetime)(PeriodSeconds(ORBTF) * 1), eqLevels[i].price, badge, clr, 9);
         }
      }
@@ -5032,9 +5032,9 @@ void DrawVolumeProfile()
    DrawHLine("VP_POC", anchor, lnEnd, vpPOC, InpVP_POC_Clr, STYLE_SOLID, 2);
    DrawHLine("VP_VAH", anchor, lnEnd, vpVAH, InpVP_VA_Clr, STYLE_DOT, 1);
    DrawHLine("VP_VAL", anchor, lnEnd, vpVAL, InpVP_VA_Clr, STYLE_DOT, 1);
-   DrawTextObj("VP_LBL_POC", lnEnd, vpPOC, " POC " + DoubleToString(vpPOC, _Digits), InpVP_POC_Clr, 10);
-   DrawTextObj("VP_LBL_VAH", lnEnd, vpVAH, " VAH " + DoubleToString(vpVAH, _Digits), InpVP_VA_Clr, 9);
-   DrawTextObj("VP_LBL_VAL", lnEnd, vpVAL, " VAL " + DoubleToString(vpVAL, _Digits), InpVP_VA_Clr, 9);
+   DrawTextObj("VP_LBL_POC", lnEnd, vpPOC, " [POC] " + DoubleToString(vpPOC, _Digits), InpVP_POC_Clr, 10);
+   DrawTextObj("VP_LBL_VAH", lnEnd, vpVAH, " [VAH] " + DoubleToString(vpVAH, _Digits), InpVP_VA_Clr, 9);
+   DrawTextObj("VP_LBL_VAL", lnEnd, vpVAL, " [VAL] " + DoubleToString(vpVAL, _Digits), InpVP_VA_Clr, 9);
   }
 
 //============================================================
