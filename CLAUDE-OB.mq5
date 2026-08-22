@@ -5437,7 +5437,7 @@ void DrawEntryReadySignal(int sess)
    string modeName = (InpORBEntryMode == ORB_CONSERVATIVE) ? "CONS" : ((InpORBEntryMode == ORB_BALANCED) ? "BAL" : "AGG");
    string quality = (InpORBEntryMode == ORB_CONSERVATIVE) ? "HIGH" : ((InpORBEntryMode == ORB_BALANCED) ? "MID" : "LOW");
    string rr = StringFormat("1:%.1f", rrRatio);
-   string main = StringFormat("  ⚡ ORDER-FLOW READY  |  %s  %s  |  MODE %s/%s  |  RR %s  |  SL %.0fp  TP %.0fp",
+   string main = StringFormat("  * ORDER-FLOW READY  |  %s  %s  |  MODE %s/%s  |  RR %s  |  SL %.0fp  TP %.0fp",
                               SESS_NAME[sess], dir, modeName, quality, rr, slPips, tpPips);
    DrawTextObj(pfx + "LBL", lblT, entryPx, main, sigC, 12);
 // ── 5. Individual price labels at line ends ───────────────────────
@@ -5999,8 +5999,8 @@ void DrawSMCObjects(int sess)
       double obMid = (ob[sess].high + ob[sess].low) / 2.0;
       DrawHLine("SMC_" + p + "_OBM", ob[sess].time, extEnd, obMid, obBrd, STYLE_DOT, 1);
       // Left-side label: "OB▲ ✦FRESH" or "OB▲ ×2"
-      string frTag = fresh ? " \x2666FRESH" : " x" + string(ob[sess].touchCount);
-      string obLbl = " OB" + (ob[sess].bullish ? "\x25B2" : "\x25BC") + frTag;
+      string frTag = fresh ? " [FRESH]" : " x" + string(ob[sess].touchCount);
+      string obLbl = " OB" + (ob[sess].bullish ? "▲" : "▼") + frTag;
       DrawTextObj("SMC_" + p + "_OBLBL", ob[sess].time, ob[sess].high, obLbl, obBrd, 10);
       // Right-side price range label at right edge
       string priceRng = DoubleToString(ob[sess].low, _Digits) + "—" + DoubleToString(ob[sess].high, _Digits);
@@ -6008,7 +6008,7 @@ void DrawSMCObjects(int sess)
       // Active zone indicator (entry zone / in zone)
       if(priceActive)
         {
-         string entLbl = stateConfirmed ? " \x25C9 ENTRY ZONE" : " \x25CF IN ZONE";
+         string entLbl = stateConfirmed ? " [ENTRY ZONE]" : " [IN ZONE]";
          color entClr = ob[sess].bullish ? C'0,255,128' : C'255,80,80';
          double entAnchor = ob[sess].bullish ? ob[sess].low : ob[sess].high;
          DrawTextObj("SMC_" + p + "_OBENTRY", extEnd - (datetime)(barSec * 5), entAnchor, entLbl, entClr, 11);
@@ -6041,14 +6041,14 @@ void DrawSMCObjects(int sess)
       // Equilibrium midline
       double fvgMid = (fvg[sess].high + fvg[sess].low) / 2.0;
       DrawHLine("SMC_" + p + "_FVGM", fvg[sess].time, extEnd, fvgMid, fgBrd, STYLE_DOT, 1);
-      string frTag = fresh ? " \x2666FRESH" : " x" + string(fvg[sess].touchCount);
-      string fvgLbl = " FVG" + (fvg[sess].bullish ? "\x25B2" : "\x25BC") + frTag;
+      string frTag = fresh ? " [FRESH]" : " x" + string(fvg[sess].touchCount);
+      string fvgLbl = " FVG" + (fvg[sess].bullish ? "▲" : "▼") + frTag;
       DrawTextObj("SMC_" + p + "_FVGLBL", fvg[sess].time, fvg[sess].high, fvgLbl, fgBrd, 10);
       string priceRng = DoubleToString(fvg[sess].low, _Digits) + "—" + DoubleToString(fvg[sess].high, _Digits);
       DrawTextObj("SMC_" + p + "_FVGRNG", extEnd, fvg[sess].bullish ? fvg[sess].low : fvg[sess].high, " " + priceRng, fgBrd, 9);
       if(priceActive)
         {
-         string entLbl = stateConfirmed ? " \x25C9 ENTRY ZONE" : " \x25CF IN ZONE";
+         string entLbl = stateConfirmed ? " [ENTRY ZONE]" : " [IN ZONE]";
          color entClr = fvg[sess].bullish ? C'0,255,210' : C'255,145,30';
          double entAnchor = fvg[sess].bullish ? fvg[sess].low : fvg[sess].high;
          DrawTextObj("SMC_" + p + "_FVGENTRY", extEnd - (datetime)(barSec * 5), entAnchor, entLbl, entClr, 11);
@@ -6142,7 +6142,7 @@ void DrawNoEntryOverlay()
    ObjectSetInteger(0, txtName, OBJPROP_COLOR, C'255,90,90');
    ObjectSetInteger(0, txtName, OBJPROP_FONTSIZE, 28);
    ObjectSetString(0, txtName, OBJPROP_FONT, "Arial Bold");
-   ObjectSetString(0, txtName, OBJPROP_TEXT, newsBlocked && newsEventTime > 0 ? "⚠ NEWS BLOCKED" : "⚠ NO ENTRY");
+   ObjectSetString(0, txtName, OBJPROP_TEXT, newsBlocked && newsEventTime > 0 ? "[!] NEWS BLOCKED" : "[!] NO ENTRY");
   }
 
 //+------------------------------------------------------------------+
@@ -6209,7 +6209,7 @@ void DrawHTFBiasBar()
    if(newsBlocked && newsEventTime > 0)
      {
       string wibT = StringSubstr(TimeToString(newsEventTime + (datetime)(7 * 3600), TIME_MINUTES), 11, 5);
-      nwStr = "NEWS: ⚠ " + wibT;
+      nwStr = "NEWS: [!] " + wibT;
       nwClr = C'255,175,50';
      }
    else
@@ -6221,7 +6221,7 @@ void DrawHTFBiasBar()
         }
       else
         {
-         nwStr = newsBlocked ? "NEWS: ⚠ BLOCK" : "NEWS: ✓ CLEAR";
+         nwStr = newsBlocked ? "NEWS: [!] BLOCK" : "NEWS: ✓ CLEAR";
          nwClr = newsBlocked ? C'255,175,50' : C'100,210,120';
         }
 // ── Draw bar ──────────────────────────────────────────────────────
@@ -6352,11 +6352,11 @@ void DrawStatusPanel()
    PanelText("PNL_HL", px + 8, y + 6, StringFormat("◈ ORB SMC v%s | %s", EA_VERSION, _Symbol), clrWhite, 9);
    PanelText("PNL_HR", px + pw - 46, y + 6, StringFormat("%02d:%02d", tm.hour, tm.min), C'140,215,140', 9);
    if(newsBlocked)
-      PanelText("PNL_NEWS", px + pw - 150, y + 6, "⚠ NEWS NOW", C'255,90,90', 8);
+      PanelText("PNL_NEWS", px + pw - 150, y + 6, "[!] NEWS NOW", C'255,90,90', 8);
    else
       if(newsNextTime > 0 && (newsNextTime - TimeGMT()) <= 3600 && (newsNextTime - TimeGMT()) > 0)
          PanelText("PNL_NEWS", px + pw - 150, y + 6,
-                   "⚠ News in " + IntegerToString((int)((newsNextTime - TimeGMT()) / 60)) + "m",
+                   "[!] News in " + IntegerToString((int)((newsNextTime - TimeGMT()) / 60)) + "m",
                    C'230,200,80', 8);
    y += hdrH;
 
@@ -6372,7 +6372,7 @@ void DrawStatusPanel()
       if(!enA[s])
         {
          PanelRect("PNL_CHIP_" + string(s), px, y, pw, chipH, C'9,10,18', C'38,40,55');
-         PanelText("PNL_CHIPT_" + string(s), px + 6, y + 2, "⊘ " + SESS_NAME[s] + " — disabled", C'60,63,80', 8);
+         PanelText("PNL_CHIPT_" + string(s), px + 6, y + 2, "[OFF] " + SESS_NAME[s] + " — disabled", C'60,63,80', 8);
          y += chipH;
          continue;
         }
@@ -6421,15 +6421,15 @@ void GetSMCLabel(int sess, string &txt, color &col)
    switch(smcState[sess])
      {
       case SMC_IDLE:
-         txt = "⏸ WAIT OR";
+         txt = "[WAIT] WAIT OR";
          col = C'70,75,100';
          break;
       case SMC_LOCKED:
-         txt = "🔒 OR LOCKED";
+         txt = "[LOCKED] OR LOCKED";
          col = C'180,180,70';
          break;
       case SMC_SWEPT:
-         txt = "💧 SWEPT " + (setupBull[sess] ? "▲" : "▼");
+         txt = "[SWEEP] SWEPT " + (setupBull[sess] ? "▲" : "▼");
          col = C'255,210,50';
          break;
       case SMC_STRUCTURE:
@@ -6437,11 +6437,11 @@ void GetSMCLabel(int sess, string &txt, color &col)
          col = clrWhite;
          break;
       case SMC_DISPLACED:
-         txt = (setupBull[sess] ? "⚡ DISPLACE↑" : "⚡ DISPLACE↓");
+         txt = (setupBull[sess] ? "* DISPLACE↑" : "* DISPLACE↓");
          col = C'100,220,255';
          break;
       case SMC_ZONE:
-         txt = "🎯 OB/FVG ZONE";
+         txt = "[TARGET] OB/FVG ZONE";
          col = C'150,100,255';
          break;
       case SMC_RETRACE:
@@ -6449,7 +6449,7 @@ void GetSMCLabel(int sess, string &txt, color &col)
          col = C'255,160,50';
          break;
       case SMC_CONFIRMED:
-         txt = (setupBull[sess] ? "✅ READY BUY" : "✅ READY SELL");
+         txt = (setupBull[sess] ? "[OK] READY BUY" : "[OK] READY SELL");
          col = (setupBull[sess] ? C'80,210,130' : C'210,80,80');
          break;
       case SMC_TRADED:
@@ -6769,7 +6769,7 @@ int DrawBigSessionCard(int sess, int px, int y, int pw)
          ltfTxt = (ltfSuggBull[sess] ? "▲ building" : "▼ building") + " " + EnumToString(ltfSuggState[sess]);
          ltfCol = C'150,160,190';
         }
-      PanelText("PNL_LTF_" + s, px + 6, y, "🎯 LTF " + ltfTxt, ltfCol, 7);
+      PanelText("PNL_LTF_" + s, px + 6, y, "[TARGET] LTF " + ltfTxt, ltfCol, 7);
       y += 12;
      }
 
@@ -6845,7 +6845,7 @@ void GetScanLabel(int sess, string &txt, color &col, color &bgCol)
    else
      {
       string blocker = (!htfOK && !dayOK) ? "HTF+DAY" : (!htfOK ? "HTF" : "DAY");
-      txt = "⛔  " + dir + "  [" + blocker + "]";
+      txt = "[BLOCK]  " + dir + "  [" + blocker + "]";
       col = C'225,155,35';
       bgCol = C'58,38,0';
      }
@@ -6872,7 +6872,7 @@ void GetGateStatus(int sess, string &txt, color &col)
      }
    if(gMinORBRange > 0 && (orH - orL) / _Point < gMinORBRange)
      {
-      txt = "⚠ RANGE SMALL";
+      txt = "[!] RANGE SMALL";
       col = C'215,130,50';
       return;
      }
@@ -6916,7 +6916,7 @@ void GetGateStatus(int sess, string &txt, color &col)
      }
    if(newsBlocked)
      {
-      txt = "⚠ NEWS";
+      txt = "[!] NEWS";
       col = C'215,130,50';
       return;
      }
@@ -6928,7 +6928,7 @@ void GetGateStatus(int sess, string &txt, color &col)
 // row and SCAN banner remain the place to cross-check those.
    if(InpUseProbScore && probScore[sess] < (double)InpMinProbScore)
      {
-      txt = "⚠ LOW SCORE";
+      txt = "[!] LOW SCORE";
       col = C'215,130,50';
       return;
      }
@@ -6936,13 +6936,13 @@ void GetGateStatus(int sess, string &txt, color &col)
    bool sellReady = IsPipelineDirectionReady(sess, false);
    if(!buyReady && !sellReady)
      {
-      txt = UsesSMC(sess) ? "⚠ CONFIRM" : "⚠ ORB FILTER";
+      txt = UsesSMC(sess) ? "[!] CONFIRM" : "[!] ORB FILTER";
       col = C'215,130,50';
       return;
      }
    if(UsesSMC(sess) && !CheckConfirmationMode(sess))
      {
-      txt = "⚠ CONFIRM";
+      txt = "[!] CONFIRM";
       col = C'215,130,50';
       return;
      }
