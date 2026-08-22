@@ -6588,10 +6588,38 @@ void GetFreshTag(int sess, bool bul, string &txt, color &col)
 //| panel's total height — and therefore the background frame's size — |
 //| is known before any content is drawn (content must be drawn AFTER  |
 //| the resized frame/background, or the frame would paint over it).   |
+string GetSMCPipelineProgress(int sess)
+  {
+   if(!UsesSMC(sess))
+      return "MODE: PURE ORB";
+   switch(smcState[sess])
+     {
+      case SMC_IDLE: return "SMC [1/7]: AWAIT OR LOCK";
+      case SMC_LOCKED: return "SMC [2/7]: OR LOCKED (SCAN SWEEP)";
+      case SMC_SWEPT: return "SMC [3/7]: " + (setupBull[sess] ? "SWEEP LOW ▲" : "SWEEP HIGH ▼");
+      case SMC_STRUCTURE: return "SMC [4/7]: BOS/CHoCH " + (setupBull[sess] ? "▲" : "▼");
+      case SMC_DISPLACED: return "SMC [5/7]: DISPLACEMENT " + (setupBull[sess] ? "▲" : "▼");
+      case SMC_ZONE: return "SMC [6/7]: OB/FVG ZONE FORMED";
+      case SMC_RETRACE: return "SMC [6/7]: RETRACE IN ZONE";
+      case SMC_CONFIRMED: return "SMC [7/7]: CONFIRMED READY " + (setupBull[sess] ? "BUY ▲" : "SELL ▼");
+      case SMC_TRADED: return "SMC: EXECUTED TRADED";
+      default: return "SMC: IDLE";
+     }
+  }
+
+string GetSessORBMetricsStr(int sess)
+  {
+   double orH = GetSessORH(sess), orL = GetSessORL(sess);
+   if(orH <= 0 || orL <= 0 || orH <= orL)
+      return "ORB Range: Waiting OR...";
+   int pips = (int)MathRound((orH - orL) / _Point);
+   return StringFormat("ORB Range: %.5f - %.5f (%dp)", orL, orH, pips);
+  }
+
 //+------------------------------------------------------------------+
 int BigCardHeight(int sess)
   {
-   int h = 110; // header(16) + score(14) + entry-risk(14) + tags(24) + buttons row(42) + padding
+   int h = 124; // header(16) + pipeline/orb(14) + score(14) + entry-risk(14) + tags(24) + buttons row(42) + padding
    double profit, entryPx, slCur, tpCur;
    if(GetOpenPosBySession(sess, profit, entryPx, slCur, tpCur))
       h += 14;
@@ -6632,6 +6660,12 @@ int DrawBigSessionCard(int sess, int px, int y, int pw)
    GetGateStatus(sess, gateTxt, gateCol);
    PanelText("PNL_GATE_" + s, px + pw - 110, y + 2, gateTxt, gateCol, 8);
    y += 16;
+
+// Pipeline & ORB Metrics line
+   string pipelineStr = GetSMCPipelineProgress(sess);
+   string orbStr = GetSessORBMetricsStr(sess);
+   PanelText("PNL_PIPE_" + s, px + 6, y, pipelineStr + " | " + orbStr, C'130,210,255', 8);
+   y += 14;
 
 // Score line — uses the cached probScore[] array (same value WriteWebData exports
 // to the web dashboard) rather than recomputing CalcProbScore live, so the on-chart
