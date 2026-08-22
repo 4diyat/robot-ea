@@ -6591,19 +6591,19 @@ void GetFreshTag(int sess, bool bul, string &txt, color &col)
 string GetSMCPipelineProgress(int sess)
   {
    if(!UsesSMC(sess))
-      return "MODE: PURE ORB";
+      return "STRATEGY: PURE ORB BREAKOUT";
    switch(smcState[sess])
      {
-      case SMC_IDLE: return "SMC [1/7]: AWAIT OR LOCK";
-      case SMC_LOCKED: return "SMC [2/7]: OR LOCKED (SCAN SWEEP)";
-      case SMC_SWEPT: return "SMC [3/7]: " + (setupBull[sess] ? "SWEEP LOW ▲" : "SWEEP HIGH ▼");
-      case SMC_STRUCTURE: return "SMC [4/7]: BOS/CHoCH " + (setupBull[sess] ? "▲" : "▼");
-      case SMC_DISPLACED: return "SMC [5/7]: DISPLACEMENT " + (setupBull[sess] ? "▲" : "▼");
-      case SMC_ZONE: return "SMC [6/7]: OB/FVG ZONE FORMED";
-      case SMC_RETRACE: return "SMC [6/7]: RETRACE IN ZONE";
-      case SMC_CONFIRMED: return "SMC [7/7]: CONFIRMED READY " + (setupBull[sess] ? "BUY ▲" : "SELL ▼");
-      case SMC_TRADED: return "SMC: EXECUTED TRADED";
-      default: return "SMC: IDLE";
+      case SMC_IDLE:      return "SMC [1/7]: AWAIT OR LOCK";
+      case SMC_LOCKED:    return "SMC [2/7]: OR LOCKED (SCAN SWEEP)";
+      case SMC_SWEPT:     return "SMC [3/7]: SWEEP " + (setupBull[sess] ? "LOW ▲" : "HIGH ▼");
+      case SMC_STRUCTURE: return "SMC [4/7]: BOS/CHoCH " + (setupBull[sess] ? "BULL ▲" : "BEAR ▼");
+      case SMC_DISPLACED: return "SMC [5/7]: DISPLACEMENT " + (setupBull[sess] ? "BULL ▲" : "BEAR ▼");
+      case SMC_ZONE:      return "SMC [6/7]: OB/FVG ZONE READY";
+      case SMC_RETRACE:   return "SMC [6/7]: RETRACE IN ZONE";
+      case SMC_CONFIRMED: return "SMC [7/7]: CONFIRMED " + (setupBull[sess] ? "BUY ▲" : "SELL ▼");
+      case SMC_TRADED:    return "SMC: EXECUTED TRADED";
+      default:            return "SMC: IDLE";
      }
   }
 
@@ -6611,15 +6611,15 @@ string GetSessORBMetricsStr(int sess)
   {
    double orH = GetSessORH(sess), orL = GetSessORL(sess);
    if(orH <= 0 || orL <= 0 || orH <= orL)
-      return "ORB Range: Waiting OR...";
+      return "ORB Range: Awaiting OR...";
    int pips = (int)MathRound((orH - orL) / _Point);
-   return StringFormat("ORB Range: %.5f - %.5f (%dp)", orL, orH, pips);
+   return StringFormat("ORB: %.5f-%.5f (%dp)", orL, orH, pips);
   }
 
 //+------------------------------------------------------------------+
 int BigCardHeight(int sess)
   {
-   int h = 124; // header(16) + pipeline/orb(14) + score(14) + entry-risk(14) + tags(24) + buttons row(42) + padding
+   int h = 110; // header(16) + pipeline/orb(14) + entry-risk(14) + tags(24) + buttons row(42) + padding
    double profit, entryPx, slCur, tpCur;
    if(GetOpenPosBySession(sess, profit, entryPx, slCur, tpCur))
       h += 14;
@@ -6654,7 +6654,8 @@ int DrawBigSessionCard(int sess, int px, int y, int pw)
    string scnT;
    color scnC, scnBg;
    GetScanLabel(sess, scnT, scnC, scnBg);
-   PanelText("PNL_HDR_" + s, px + 6, y + 2, SESS_NAME[sess] + " — " + scnT, scnC, 9);
+   string modeTag = UsesSMC(sess) ? "[SMC]" : "[ORB]";
+   PanelText("PNL_HDR_" + s, px + 6, y + 2, SESS_NAME[sess] + " " + modeTag + " — " + scnT, scnC, 9);
    string gateTxt;
    color gateCol;
    GetGateStatus(sess, gateTxt, gateCol);
@@ -6667,24 +6668,18 @@ int DrawBigSessionCard(int sess, int px, int y, int pw)
    PanelText("PNL_PIPE_" + s, px + 6, y, pipelineStr + " | " + orbStr, C'130,210,255', 8);
    y += 14;
 
-// Score line — uses the cached probScore[] array (same value WriteWebData exports
-// to the web dashboard) rather than recomputing CalcProbScore live, so the on-chart
-// card and the web dashboard always agree. Shows "OFF" when the probability-score
-// gate is disabled, since the score gates nothing in that case.
+// Score & Entry/Risk Preview line
    double score = probScore[sess];
    string scoreStr = InpUseProbScore ? (DoubleToString(score, 0) + " (" + GetProbGrade(score) + ")") : "OFF";
-   PanelText("PNL_SCORE_" + s, px + 6, y, "Score " + scoreStr, C'190,195,220', 8);
-   y += 14;
-
-// Entry/risk line
    double pvEntry = 0, pvSL = 0, pvTP = 0, pvSLp = 0, pvTPp = 0, pvRR = 0, pvRisk = 0, pvRiskPct = 0;
    if(GetSessORH(sess) > 0)
       PreviewEntryRisk(sess, bul, pvEntry, pvSL, pvTP, pvSLp, pvTPp, pvRR, pvRisk, pvRiskPct);
    string erLine = (pvEntry > 0)
-                   ? StringFormat("Entry %s · SL %s · TP %s · RR 1:%.1f",
+                   ? StringFormat("Score %s · Entry %s · SL %s · TP %s (1:%.1f)",
+                                  scoreStr,
                                   DoubleToString(pvEntry, _Digits), DoubleToString(pvSL, _Digits),
                                   DoubleToString(pvTP, _Digits), pvRR)
-                   : "Entry/SL/TP — belum tersedia";
+                   : "Score " + scoreStr + " · Entry/SL/TP — belum tersedia";
    PanelText("PNL_ER_" + s, px + 6, y, erLine, C'170,200,230', 8);
    y += 14;
 
