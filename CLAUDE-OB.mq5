@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
-//|                        ORB_SMC_EA.mq5                           |
-//|   ORB + SMC FULL 9-STEP INSTITUTIONAL STRATEGY                 |
-//|   Version : 6.23 — Unified entry pipeline & gate consistency     |
+//|                        CLAUDE-OB.mq5                             |
+//|   PROFESSIONAL SMC + OPEN RANGE BREAKOUT (ORB) EA              |
+//|   Version : 6.25 — Professional SMC Pipeline & ORB Session EA   |
 //|                                                                  |
 //|  BUG FIXES v5.10:                                               |
 //|  · dispBar index-shift → dispTime (datetime-based lookup)       |
