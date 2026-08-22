@@ -3495,6 +3495,33 @@ void TradeEngine()
      }
   }
 
+// Visual indicator for HTF CHoCH / BOS structural break level
+void DrawHTFStructure()
+  {
+   if(!InpDrawObjects)
+     {
+      ObjectDelete(0, "SMC_HTF_BOS");
+      ObjectDelete(0, "SMC_HTF_BOSLBL");
+      return;
+     }
+   if(htfBosLevel <= 0.0 || htfBias == BIAS_NEUTRAL)
+     {
+      ObjectDelete(0, "SMC_HTF_BOS");
+      ObjectDelete(0, "SMC_HTF_BOSLBL");
+      return;
+     }
+   datetime now = (ArraySize(ratesORB) > 0) ? ratesORB[0].time : TimeCurrent();
+   int barSec = PeriodSeconds(ORBTF);
+   datetime bS = now - (datetime)(barSec * 20);
+   datetime bE = now + (datetime)(barSec * 12);
+   color bC = (htfBias == BIAS_BULLISH) ? C'0,220,255' : C'255,100,100';
+   string dirStr = (htfBias == BIAS_BULLISH) ? "▲ BULL" : "▼ BEAR";
+   DrawHLine("SMC_HTF_BOS", bS, bE, htfBosLevel, bC, STYLE_DASHDOT, 2);
+   DrawTextObj("SMC_HTF_BOSLBL", bS, htfBosLevel,
+               "  HTF CHoCH/BOS " + dirStr + " @" + DoubleToString(htfBosLevel, _Digits),
+               bC, 10);
+  }
+
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
@@ -5521,6 +5548,7 @@ void DrawAll(bool fullRedraw)
      }
    for(int s = 0; s < SESS_COUNT; s++)
       DrawSMCObjects(s);
+   DrawHTFStructure();
 // Entry-ready visual: updates every bar so arrow/RR box tracks live price
    for(int s = 0; s < SESS_COUNT; s++)
       DrawEntryReadySignal(s);
