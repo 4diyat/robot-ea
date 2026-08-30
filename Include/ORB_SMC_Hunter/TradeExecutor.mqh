@@ -144,25 +144,26 @@ private:
      }
    /** Tipe waktu pending sesuai mode simbol: FX umumnya GTC; sebagian
        broker kripto/indeks MENOLAK GTC (hanya DAY/SPECIFIED) → error 10022
-       'Invalid expiration'. Pilih otomatis dr properti ekspirasi. */
+       'Invalid expiration'. Pilih otomatis dr flag mode simbol. */
    void                ResolvePendingTime(ENUM_ORDER_TYPE_TIME &t,datetime &exp) const
      {
       t=ORDER_TIME_GTC;
       exp=0;
-      //--- properti resmi SYMBOL_EXPIRATION_{GTC,DAY,SPECIFIED} = 1 bila
-      //--- mode didukung simbol (bukan bitmask — jangan AND dgn MODE)
-      if(SymbolInfoInteger(_Symbol,SYMBOL_EXPIRATION_GTC)!=0)
+      //--- SYMBOL_EXPIRATION_MODE = bitmask flag ENUM_SYMBOL_EXPIRATION_MODE
+      //--- (GTC=1, DAY=2, SPECIFIED=4). Jangan pakai nama flag sbg properti.
+      long mode=SymbolInfoInteger(_Symbol,SYMBOL_EXPIRATION_MODE);
+      if((mode&(long)SYMBOL_EXPIRATION_GTC)!=0)
          return;                                   // mode normal: GTC
       int hrs=m_cfg.pendingExpireHours;
       if(hrs<1)
          hrs=24;
-      if(SymbolInfoInteger(_Symbol,SYMBOL_EXPIRATION_SPECIFIED)!=0)
+      if((mode&(long)SYMBOL_EXPIRATION_SPECIFIED)!=0)
         {
          t=ORDER_TIME_SPECIFIED;
          exp=TimeTradeServer()+(datetime)(hrs*3600);
          return;
         }
-      if(SymbolInfoInteger(_Symbol,SYMBOL_EXPIRATION_DAY)!=0)
+      if((mode&(long)SYMBOL_EXPIRATION_DAY)!=0)
          t=ORDER_TIME_DAY;
      }
 
