@@ -25,7 +25,7 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 
 //=== EA identity =====================================================
 #define HUNT_NAME             "ORB_SMC_Hunter"
-#define HUNT_VERSION          "0.10"
+#define HUNT_VERSION          "0.99"
 
 //=== Prefix objek chart (1 per kategori render) ======================
 #define HUNT_PREFIX_OR        "HUNT_OR_"     // garis opening range per sesi
@@ -56,8 +56,14 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 #define HUNT_COL_AMD_MAN      C'255,111,97'  // coral  — Manipulation
 #define HUNT_COL_AMD_DIS      C'155,89,182'  // purple — Distribution
 #define HUNT_COL_AMD_DONE     C'117,117,117' // gray   — Selesai
-#define HUNT_COL_DASH_BG      C'16,22,34'
-#define HUNT_COL_DASH_BORDER  C'70,88,118'
+#define HUNT_COL_DASH_BG      C'8,12,20'    // HUD night-ops (v0.99+)
+#define HUNT_COL_DASH_BORDER  C'46,64,92'
+#define HUNT_COL_DASH_HDR     C'10,20,34'
+#define HUNT_COL_DASH_ACCENT  C'0,203,255'  // cyan garis & aksen
+#define HUNT_COL_DASH_LABEL   C'124,142,168'// kolom label (muted)
+#define HUNT_COL_DASH_SECT    C'96,208,232' // judul seksi
+#define HUNT_COL_DASH_TRACK   C'26,38,56'   // track progress bar
+#define HUNT_COL_DASH_SHDW    C'3,5,9'      // drop shadow panel
 
 #define HUNT_CODE_ASIA        "ASI"
 #define HUNT_CODE_LONDON      "LON"

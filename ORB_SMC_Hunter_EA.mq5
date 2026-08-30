@@ -23,7 +23,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.96"
+#property version     "1.99"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -1359,7 +1359,7 @@ void OnTimer()
      }
    if(g_dash.IsActive())
      {
-      g_dash.UpdateOnTimer(secBar,secFc,fcLabel);
+      g_dash.UpdateOnTimer(secBar,PeriodSeconds(_Period),secFc,fcLabel);
       SNewsStatus ns=g_news.Status(nowBrk);
       g_dash.SetNewsTime(StringFormat("News data: %s %s",
                                       TimeToString(ns.lastFetchUtc,TIME_DATE|TIME_MINUTES),
