@@ -52,7 +52,7 @@ private:
    static int          MonthIndexLower(const string low)
      {
       for(int i=0;i<12;i++)
-         if(StringFind(low,StringToLower(MonthName(i)))>=0)
+         if(StringFind(low,HUNT_ToLower(MonthName(i)))>=0)
             return(i+1);
       return(0);
      }
@@ -98,18 +98,18 @@ private:
          int c=StringFind(over,",");
          if(c>0)
            {
-            m_cur1=StringToUpper(StringSubstr(over,0,c));
-            m_cur2=StringToUpper(StringTrim(StringSubstr(over,c+1)));
+            m_cur1=HUNT_ToUpper(StringSubstr(over,0,c));
+            m_cur2=HUNT_ToUpper(HUNT_Trim(StringSubstr(over,c+1)));
            }
          else
-            m_cur1=StringToUpper(over);
+            m_cur1=HUNT_ToUpper(over);
          return;
         }
       string sym=_Symbol;
       if(StringLen(sym)<6)
          return;
-      string base=StringToUpper(StringSubstr(sym,0,3));
-      string quote=StringToUpper(StringSubstr(sym,3,3));
+      string base=HUNT_ToUpper(StringSubstr(sym,0,3));
+      string quote=HUNT_ToUpper(StringSubstr(sym,3,3));
       m_cur1=quote;
       bool fiat=(base=="EUR"||base=="GBP"||base=="JPY"||base=="CHF"||
                  base=="AUD"||base=="NZD"||base=="CAD"||base=="CNH"||base=="CNY");
@@ -135,7 +135,7 @@ private:
       string  hdrOut;
       ArrayResize(post,0);
       ResetLastError();
-      int code=WebRequest(WEBRequest_GET,url,headers,(uint)m_cfg.newsFetchTimeoutMs,post,recv,hdrOut);
+      int code=WebRequest(WEB_REQ_TYPE_GET,url,headers,(uint)m_cfg.newsFetchTimeoutMs,post,recv,hdrOut);
       if(code<=0)
         {
          m_lastError=StringFormat("WebRequest err=%d (cek Allow WebRequest URL)",GetLastError());
@@ -216,10 +216,10 @@ private:
       int yp=StringFind(cellLow,"20");
       if(yp<0)
          return(false);
-      int year=(int)StrToInteger(StringSubstr(cellRaw,yp,4));
+      int year=(int)StringToInteger(StringSubstr(cellRaw,yp,4));
       if(year<2000 || year>2100)
          return(false);
-      int mp=StringFind(cellLow,StringToLower(MonthName(mi-1)));
+      int mp=StringFind(cellLow,HUNT_ToLower(MonthName(mi-1)));
       if(mp<0)
          return(false);
       int dp=mp+(int)StringLen(MonthName(mi-1));
@@ -303,7 +303,7 @@ public:
             p2=hlen;
          string line=StringSubstr(html,p1,p2-p1);
          pos=p2+1;
-         string low=StringToLower(line);
+         string low=HUNT_ToLower(line);
          ArrayResize(cells,maxC);
          nc=0;
          ExtractCells(line,cells,nc,maxC);
@@ -311,7 +311,7 @@ public:
             continue;
          //--- header hari?
          datetime dd0;
-         if(ParseDayHeader(StringToLower(cells[0]),cells[0],dd0))
+         if(ParseDayHeader(HUNT_ToLower(cells[0]),cells[0],dd0))
            {
             curDay=dd0;
             continue;
@@ -353,8 +353,8 @@ public:
            }
          if(title=="")
             continue;
-         int hh=(int)StrToInteger(StringSubstr(cells[tCell],0,2));
-         int mm=(int)StrToInteger(StringSubstr(cells[tCell],3,2));
+         int hh=(int)StringToInteger(StringSubstr(cells[tCell],0,2));
+         int mm=(int)StringToInteger(StringSubstr(cells[tCell],3,2));
          if(hh<0 || hh>23 || mm<0 || mm>59)
             continue;
          int imp=HeuristikImpact(low);

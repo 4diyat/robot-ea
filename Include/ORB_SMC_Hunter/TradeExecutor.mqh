@@ -19,8 +19,6 @@
 #define ORB_SMC_HUNTER_TRADEEXECUTOR_MQH
 
 #include <Trade\Trade.mqh>
-#include <Trade\PositionInfo.mqh>
-#include <Trade\OrderInfo.mqh>
 #include "DataService.mqh"
 
 #define HUNT_TAG_MAX 64
@@ -29,8 +27,6 @@ class CTradeExecutor
   {
 private:
    CTrade              m_trade;
-   CPositionInfo       m_pinfo;
-   COrderInfo          m_oinfo;
    SHunterSettings     m_cfg;
    STicketTag          m_tags[HUNT_TAG_MAX];
    int                 m_tagCount;
@@ -313,11 +309,11 @@ public:
      {
       for(int i=PositionsTotal()-1;i>=0;i--)
         {
-         ulong tk=m_pinfo.PositionGetTicket(i);
+         ulong tk=PositionGetTicket(i);
          if(tk==0)
             continue;
-         if(m_pinfo.PositionMagic()==(ulong)m_cfg.magic &&
-            m_pinfo.PositionSymbol()==_Symbol)
+         if(PositionGetInteger(POSITION_MAGIC)==(long)m_cfg.magic &&
+            PositionGetString(POSITION_SYMBOL)==_Symbol)
             return(true);
         }
       return(false);
@@ -326,10 +322,10 @@ public:
      {
       for(int i=OrdersTotal()-1;i>=0;i--)
         {
-         ulong tk=m_oinfo.OrderGetTicket(i);
+         ulong tk=OrderGetTicket(i);
          if(tk==0)
             continue;
-         if(m_oinfo.OrderMagic()==(ulong)m_cfg.magic && m_oinfo.OrderSymbol()==_Symbol)
+         if(OrderGetInteger(ORDER_MAGIC)==(long)m_cfg.magic && OrderGetString(ORDER_SYMBOL)==_Symbol)
             return(true);
         }
       return(false);
@@ -339,9 +335,9 @@ public:
      {
       for(int i=PositionsTotal()-1;i>=0;i--)
         {
-         ulong tk=m_pinfo.PositionGetTicket(i);
-         if(tk==0 || m_pinfo.PositionMagic()!=(ulong)m_cfg.magic ||
-            m_pinfo.PositionSymbol()!=_Symbol)
+         ulong tk=PositionGetTicket(i);
+         if(tk==0 || PositionGetInteger(POSITION_MAGIC)!=(long)m_cfg.magic ||
+            PositionGetString(POSITION_SYMBOL)!=_Symbol)
             continue;
          STicketTag tg;
          if(TagOf(tk,tg) && tg.planId==planId)
@@ -356,7 +352,7 @@ public:
    bool              OrderStillLive(const ulong ticket)
      {
       for(int i=OrdersTotal()-1;i>=0;i--)
-         if(m_oinfo.OrderGetTicket(i)==ticket)
+         if(OrderGetTicket(i)==ticket)
             return(true);
       return(false);
      }
@@ -420,18 +416,18 @@ public:
      {
       for(int i=PositionsTotal()-1;i>=0;i--)
         {
-         ulong tk=m_pinfo.PositionGetTicket(i);
-         if(tk==0 || m_pinfo.PositionMagic()!=(ulong)m_cfg.magic ||
-            m_pinfo.PositionSymbol()!=_Symbol)
+         ulong tk=PositionGetTicket(i);
+         if(tk==0 || PositionGetInteger(POSITION_MAGIC)!=(long)m_cfg.magic ||
+            PositionGetString(POSITION_SYMBOL)!=_Symbol)
             continue;
          ticket=tk;
-         vol=m_pinfo.PositionVolume();
-         price=m_pinfo.PositionPriceOpen();
-         sl=m_pinfo.PositionSL();
-         tp=m_pinfo.PositionTP();
-         pl=m_pinfo.PositionProfit();
-         dir=(m_pinfo.PositionType()==POSITION_TYPE_BUY ? HUNT_DIR_BUY : HUNT_DIR_SELL);
-         if(!SessionOfTicket(ticket,session,m_pinfo.PositionComment()))
+         vol=PositionGetDouble(POSITION_VOLUME);
+         price=PositionGetDouble(POSITION_PRICE_OPEN);
+         sl=PositionGetDouble(POSITION_SL);
+         tp=PositionGetDouble(POSITION_TP);
+         pl=PositionGetDouble(POSITION_PROFIT);
+         dir=(PositionGetInteger(POSITION_TYPE)==POSITION_TYPE_BUY ? HUNT_DIR_BUY : HUNT_DIR_SELL);
+         if(!SessionOfTicket(ticket,session,PositionGetString(POSITION_COMMENT)))
             session=HUNT_SESSION_NONE;
          return(true);
         }
@@ -448,23 +444,23 @@ public:
       nPend=0;
       for(int i=PositionsTotal()-1;i>=0;i--)
         {
-         ulong tk=m_pinfo.PositionGetTicket(i);
-         if(tk==0 || m_pinfo.PositionMagic()!=(ulong)m_cfg.magic ||
-            m_pinfo.PositionSymbol()!=_Symbol)
+         ulong tk=PositionGetTicket(i);
+         if(tk==0 || PositionGetInteger(POSITION_MAGIC)!=(long)m_cfg.magic ||
+            PositionGetString(POSITION_SYMBOL)!=_Symbol)
             continue;
          int s2;
-         if(SessionOfTicket(tk,s2,m_pinfo.PositionComment()) && s2==session)
+         if(SessionOfTicket(tk,s2,PositionGetString(POSITION_COMMENT)) && s2==session)
             if(ClosePosition(tk,0.0,"force-close sesi"))
                nPos++;
         }
       for(int i=OrdersTotal()-1;i>=0;i--)
         {
-         ulong tk=m_oinfo.OrderGetTicket(i);
-         if(tk==0 || m_oinfo.OrderMagic()!=(ulong)m_cfg.magic ||
-            m_oinfo.OrderSymbol()!=_Symbol)
+         ulong tk=OrderGetTicket(i);
+         if(tk==0 || OrderGetInteger(ORDER_MAGIC)!=(long)m_cfg.magic ||
+            OrderGetString(ORDER_SYMBOL)!=_Symbol)
             continue;
          int s2;
-         if(SessionOfTicket(tk,s2,m_oinfo.OrderComment()) && s2==session)
+         if(SessionOfTicket(tk,s2,OrderGetString(ORDER_COMMENT)) && s2==session)
             if(CancelOrder(tk,"force-close sesi"))
                nPend++;
         }
@@ -486,11 +482,11 @@ public:
       double s=0.0;
       for(int i=PositionsTotal()-1;i>=0;i--)
         {
-         ulong tk=m_pinfo.PositionGetTicket(i);
-         if(tk==0 || m_pinfo.PositionMagic()!=(ulong)m_cfg.magic ||
-            m_pinfo.PositionSymbol()!=_Symbol)
+         ulong tk=PositionGetTicket(i);
+         if(tk==0 || PositionGetInteger(POSITION_MAGIC)!=(long)m_cfg.magic ||
+            PositionGetString(POSITION_SYMBOL)!=_Symbol)
             continue;
-         s+=m_pinfo.PositionProfit()+m_pinfo.PositionSwap();
+         s+=PositionGetDouble(POSITION_PROFIT)+PositionGetDouble(POSITION_SWAP);
         }
       return(s);
      }
@@ -506,10 +502,10 @@ public:
          ulong tk=m_tags[i].ticket;
          bool live=false;
          for(int p=PositionsTotal()-1;p>=0 && !live;p--)
-            if(m_pinfo.PositionGetTicket(p)==tk)
+            if(PositionGetTicket(p)==tk)
                live=true;
          for(int o=OrdersTotal()-1;o>=0 && !live;o--)
-            if(m_oinfo.OrderGetTicket(o)==tk)
+            if(OrderGetTicket(o)==tk)
                live=true;
          if(!live)
             Untag(tk);

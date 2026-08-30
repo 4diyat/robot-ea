@@ -13,6 +13,16 @@
 #ifndef ORB_SMC_HUNTER_DEFINES_MQH
 #define ORB_SMC_HUNTER_DEFINES_MQH
 
+
+//+------------------------------------------------------------------+
+//| Helper utilitas string — MQL5: StringToLower/Upper/TrimLeft/Right  |
+//| mengubah argumen in-place (return int), bukan fungsi ekspresi.       |
+//| Pass-by-value = salinan lokal → aman utk ekspresi `x==ToUpper(y)`. |
+//+------------------------------------------------------------------+
+string HUNT_ToLower(string s)  { StringToLower(s);  return(s); }
+string HUNT_ToUpper(string s)  { StringToUpper(s);  return(s); }
+string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s); }
+
 //=== EA identity =====================================================
 #define HUNT_NAME             "ORB_SMC_Hunter"
 #define HUNT_VERSION          "0.10"

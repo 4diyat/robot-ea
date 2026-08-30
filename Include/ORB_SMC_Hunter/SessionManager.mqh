@@ -39,7 +39,6 @@ private:
        Idempoten via m_ingested — aman dipanggil berulang per update. */
    void                IngestBars(const int session,const CDataService &data)
      {
-      SOpenRange &r=m_or[session];
       int nb=data.ClosedBars();
       for(int b=nb-1;b>=0;b--)              // urut dari yang tertua
         {
@@ -48,18 +47,18 @@ private:
             continue;
          if(br.time<=m_ingested[session])
             continue;
-         if(br.time>=r.rangeEnd)             // di luar jendela: lewati & maju memo
+         if(br.time>=m_or[session].rangeEnd)             // di luar jendela: lewati & maju memo
            {
             m_ingested[session]=br.time;
             continue;
            }
-         if(br.time<r.sessionStart)
+         if(br.time<m_or[session].sessionStart)
             continue;
-         if(r.high<=0.0 || br.high>r.high)
-            r.high=br.high;
-         if(r.low<=0.0  || br.low<r.low)
-            r.low=br.low;
-         r.bars++;
+         if(m_or[session].high<=0.0 || br.high>m_or[session].high)
+            m_or[session].high=br.high;
+         if(m_or[session].low<=0.0  || br.low<m_or[session].low)
+            m_or[session].low=br.low;
+         m_or[session].bars++;
          m_ingested[session]=br.time;
         }
      }
@@ -135,8 +134,8 @@ public:
      {
       if(session<0 || session>=HUNT_SESSION_COUNT || !m_cfg.enableSession[session])
          return(false);
-      const SOpenRange &r=m_or[session];
-      return(nowBroker>=r.sessionStart && nowBroker<r.sessionEnd);
+      return(nowBroker>=m_or[session].sessionStart &&
+             nowBroker< m_or[session].sessionEnd);
      }
    /** true sekarang di dalam jendela pembentukan OR sesi. */
    bool              IsRangeForming(const int session,const datetime nowBroker) const
@@ -238,26 +237,25 @@ public:
         {
          if(!m_cfg.enableSession[s])
             continue;
-         SOpenRange &r=m_or[s];
-         if(r.sessionStart==0)
+         if(m_or[s].sessionStart==0)
             continue;
          IngestBars(s,data);
-         if(nowBroker>=r.rangeEnd && !r.formed)
+         if(nowBroker>=m_or[s].rangeEnd && !m_or[s].formed)
            {
-            r.formed=true;
-            double sz=(data.PipSize()>0.0 ? (r.high-r.low)/data.PipSize() : 0.0);
-            r.sizeOk=(m_cfg.minRangePips<=0.0 || sz>=m_cfg.minRangePips);
-            if(!r.sizeOk)
+            m_or[s].formed=true;
+            double sz=(data.PipSize()>0.0 ? (m_or[s].high-m_or[s].low)/data.PipSize() : 0.0);
+            m_or[s].sizeOk=(m_cfg.minRangePips<=0.0 || sz>=m_cfg.minRangePips);
+            if(!m_or[s].sizeOk)
               {
-               r.status=ORB_STATUS_INVALIDATED;
+               m_or[s].status=ORB_STATUS_INVALIDATED;
                PrintFormat("%s | sesi%d: OR %.1f pips < min %.1f → skip hari ini",
                            HUNT_NAME,s,sz,m_cfg.minRangePips);
               }
             else
-               r.status=ORB_STATUS_RANGING;
+               m_or[s].status=ORB_STATUS_RANGING;
            }
-         if(r.breakoutTime>0)
-            r.barsSinceBreakout++;
+         if(m_or[s].breakoutTime>0)
+            m_or[s].barsSinceBreakout++;
         }
       m_active=ActiveSession(nowBroker);
      }

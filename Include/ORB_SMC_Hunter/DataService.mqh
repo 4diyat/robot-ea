@@ -64,7 +64,7 @@ public:
    bool              Init(const SHunterSettings &cfg)
      {
       m_cfg=cfg;
-      if(!m_sym.Initialize(_Symbol))
+      if(!m_sym.Name(_Symbol))
         {
          PrintFormat("%s | DataService: simbol %s gagal di-inisialisasi",HUNT_NAME,_Symbol);
          return(false);

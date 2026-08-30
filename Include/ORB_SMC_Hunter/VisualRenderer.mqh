@@ -115,7 +115,7 @@ private:
      }
    void                DrawTextLabel(const string name,const datetime t,const double p,
                                      const string text,const color clr,const int fsize,
-                                     const ENUM_ANCHOR_TYPE anchor,const int category,
+                                     const ENUM_ANCHOR_POINT anchor,const int category,
                                      const datetime expireTime)
      {
       BaseObj(name,OBJ_TEXT);
@@ -130,7 +130,7 @@ private:
       Touch(name);
      }
    void                DrawArrow(const string name,const datetime t,const double p,
-                                 const int code,const color clr,const ENUM_ANCHOR_TYPE anchor,
+                                 const int code,const color clr,const ENUM_ANCHOR_POINT anchor,
                                  const int category,const datetime expireTime)
      {
       BaseObj(name,OBJ_ARROW);
@@ -315,7 +315,7 @@ public:
             st="Invalidated";
          DrawTextLabel(HUNT_PREFIX_OR+"lbl"+tag,r.rangeEnd,r.high,
                        StringFormat("%s OR %s %s",CSessionManager::SessionName(s),st,
-                                    PipsStr(data,r.high-r.low)),clr,8,ANCHOR_LOWER_LEFT,
+                                    PipsStr(data,r.high-r.low)),clr,8,ANCHOR_LEFT_LOWER,
                        HUNT_LED_OR,0);
         }
      }
@@ -347,7 +347,7 @@ public:
                      z.bottom,c,fvg,HUNT_LED_OB,0);
          if(z.state==HUNT_ZONE_MITIGATED)
             DrawTextLabel(nm+"~mit",z.extendTime,z.top,
-                          (fvg ? "FVG filled?" : "OB mit."),clrGray,7,ANCHOR_LOWER_LEFT,
+                          (fvg ? "FVG filled?" : "OB mit."),clrGray,7,ANCHOR_LEFT_LOWER,
                           (fvg ? HUNT_LED_FVG : HUNT_LED_OB),0);
         }
      }
@@ -385,9 +385,9 @@ public:
          color c=(choch ? clrMagenta : (evs[i].dir==HUNT_DIR_BUY ? clrLimeGreen : clrOrangeRed));
          DrawArrow(HUNT_PREFIX_STR+"bo"+IntegerToString((long)evs[i].time),evs[i].time,evs[i].price,
                    (evs[i].dir==HUNT_DIR_BUY ? 241 : 242),c,
-                   (evs[i].dir==HUNT_DIR_BUY ? ANCHOR_TOP : ANCHOR_BOTTOM),HUNT_LED_STR,0);
+                   (evs[i].dir==HUNT_DIR_BUY ? ANCHOR_UPPER : ANCHOR_LOWER),HUNT_LED_STR,0);
          DrawTextLabel(HUNT_PREFIX_STR+"bt"+IntegerToString((long)evs[i].time),evs[i].time,evs[i].price,
-                       (choch ? "CHoCH" : "BOS"),c,7,ANCHOR_LOWER_LEFT,HUNT_LED_STR,0);
+                       (choch ? "CHoCH" : "BOS"),c,7,ANCHOR_LEFT_LOWER,HUNT_LED_STR,0);
         }
      }
 
@@ -405,7 +405,7 @@ public:
             continue;
          DrawArrow(HUNT_PREFIX_SWP+IntegerToString((long)ps[i].sweptTime),ps[i].sweptTime,
                    ps[i].sweptExtreme,(ps[i].abovePrice ? 242 : 241),clrDeepPink,
-                   (ps[i].abovePrice ? ANCHOR_BOTTOM : ANCHOR_TOP),HUNT_LED_SWP,0);
+                   (ps[i].abovePrice ? ANCHOR_LOWER : ANCHOR_UPPER),HUNT_LED_SWP,0);
         }
      }
 
@@ -418,7 +418,7 @@ public:
       string nm=HUNT_PREFIX_ENT+IntegerToString((long)plan.planId);
       bool buy=(plan.dir==HUNT_DIR_BUY);
       DrawArrow(nm,fillTime,fillPrice,(buy ? 233 : 234),(buy ? HUNT_COL_READY : HUNT_COL_BEAR),
-                (buy ? ANCHOR_TOP : ANCHOR_BOTTOM),HUNT_LED_ENT,fillTime+86400);
+                (buy ? ANCHOR_UPPER : ANCHOR_LOWER),HUNT_LED_ENT,fillTime+86400);
       int dg=data.Digits();
       DrawTextLabel(nm+"lbl",fillTime,fillPrice,
                     StringFormat("%s @ %s | SL %s | TP %s | RR %.1f",
@@ -459,7 +459,7 @@ public:
                       HUNT_LED_PIV,t2);
          DrawTextLabel(HUNT_PREFIX_PIV+nm[i]+"_t",t2,lv[i],
                        StringFormat("%s %s",nm[i],DoubleToString(lv[i],data.Digits())),
-                       cl[i],7,ANCHOR_RIGHT_LOWER,HUNT_LED_PIV,t2);
+                       cl[i],7,ANCHOR_LOWER_RIGHT,HUNT_LED_PIV,t2);
         }
      }
 
