@@ -178,7 +178,7 @@ void     FillSmcContext(const int s,const SOpenRange &r,const ENUM_HUNT_DIR dir,
                         const double price,SSMCContext &ctx);
 bool     RetestReaction(const int s,const SSignalPlan &plan);
 void     InvalidateSetup(const int s,const string why);
-void     CollectRealizedPnl(const int s);
+double   CollectRealizedPnl(const int s);
 string   BuildSignalLine(const int s);
 void     RenderAllStaticLayers(const datetime nowBrk);
 void     PipelineOnNewBar(void);
