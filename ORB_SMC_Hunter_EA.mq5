@@ -23,7 +23,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.100"
+#property version     "1.102"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -69,6 +69,10 @@ input ENUM_TIMEFRAMES     InpHTFTimeframe    = PERIOD_H4;       // Timeframe bia
 
 input group "=== Confluence Settings ==="
 input int                 InpMinConfluenceScore = 60;           // Skor confluence minimum 0..100
+
+input group "=== Mode Trading ==="
+input ENUM_HUNT_MODE        InpMode       = HUNT_MODE_INTRADAY; // 0=INTRADAY (sesi) 1=SWING (hold overnight)
+input bool                  InpSwingCloseOnOppChoch = true;     // SWING: tutup posisi saat HTF CHoCH berlawanan
 
 input group "=== Entry Mode ==="
 input ENUM_ENTRY_MODE     InpEntryMode = ENTRY_PENDING_ORDER;  // 0=Execution(market) 1=Pending(limit@zona)
@@ -221,6 +225,8 @@ bool SnapshotSettings(SHunterSettings &s)
    s.htf                  =InpHTFTimeframe;
    s.minScore             =InpMinConfluenceScore;
    s.entryMode            =InpEntryMode;
+   s.mode                 =InpMode;
+   s.swingCloseOnOppChoch =InpSwingCloseOnOppChoch;
    s.riskPercent          =InpRiskPercent;
    s.riskBase             =InpRiskBase;
    s.minRR                =InpMinRR;
@@ -326,6 +332,24 @@ bool SnapshotSettings(SHunterSettings &s)
    s.pipOverride=InpPipSizeOverride;
    if(s.pipOverride>0.0)
       s.pipSize=s.pipOverride;                 // broker/konvensi eksotis
+   //--- MODE BUNDLE (SWING, v1.02): preset konservatif utk carry overnight.
+   //--- MENIMPA field-field ini dr input (nol dampak saat INTRADAY).
+   if(s.mode==HUNT_MODE_SWING)
+     {
+      s.forceCloseMinBefore=0;                     // tak ada tutup paksa
+      if(s.retestMaxBars<40)
+         s.retestMaxBars=40;
+      if(s.slAtrMult<0.5)
+         s.slAtrMult=0.5;
+      if(s.minRR<2.5)
+         s.minRR=2.5;
+      if(s.tp1RR>0.0 && s.tp1RR<1.5)
+         s.tp1RR=1.5;
+      if(s.pendingExpireHours<48)
+         s.pendingExpireHours=48;
+      if(s.maxExtensionPct<45.0)
+         s.maxExtensionPct=45.0;
+     }
    //--- jam sesi → ruang BROKER ------------------------------------------------
    int inStart[HUNT_SESSION_COUNT]={InpAsiaStart,InpLondonStart,InpNYStart};
    int inEnd  [HUNT_SESSION_COUNT]={InpAsiaEnd,InpLondonEnd,InpNYEnd};
@@ -892,6 +916,13 @@ void PipelineOnNewBar()
       for(int s=0;s<HUNT_SESSION_COUNT;s++)
         {
          g_lastPnlScan[s]=0;
+         //--- v1.02: posisi/pending HIDUP tidak di-clobber rollover (SWING
+         //--- carry overnight; dulu bisa jadi yatim saat force-close off)
+         if(g_state[s]==HUNT_STATE_MANAGING || g_plan[s].pendingTicket!=0)
+           {
+            g_lastBo[s].time=0;
+            continue;
+           }
          g_state[s]=HUNT_STATE_IDLE;
          g_plan[s].Reset();
          g_lastBo[s].time=0;
@@ -920,13 +951,43 @@ void PipelineOnNewBar()
       for(int sc=0;sc<HUNT_SESSION_COUNT;sc++)
         {
          int st=(int)g_state[sc];
-         if(st!=HUNT_STATE_BREAKOUT_CONFIRMED && st!=HUNT_STATE_WAIT_RETEST &&
+         bool mg=(st==HUNT_STATE_MANAGING);
+         if(!mg && st!=HUNT_STATE_BREAKOUT_CONFIRMED && st!=HUNT_STATE_WAIT_RETEST &&
             st!=HUNT_STATE_READY_ENTRY)
             continue;
          ENUM_HUNT_DIR setupDir=(g_plan[sc].dir!=HUNT_DIR_NONE ? g_plan[sc].dir
                                  : g_lastBo[sc].dir);
          if(setupDir!=cev.fromDir)
             continue;                        // setup tidak searah bias lama
+         if(mg)
+           {
+            //--- SWING ONLY (v1.02): bias berbalik melawan posisi = exit.
+            //--- INTRADAY tetap sesuai spesifikasi: CHoCH tak menyentuh posisi.
+            if(g_settings.mode!=HUNT_MODE_SWING || !g_settings.swingCloseOnOppChoch)
+               continue;
+            int nP=0,nQ=0,nF=0;
+            g_exec.CloseSessionPositions(sc,nP,nQ,nF);
+            if(nF>0)
+               g_exec.CloseSessionPositions(sc,nP,nQ,nF);    // upaya ke-2 (requote)
+            if(nF>0)
+              {
+               PrintFormat("%s | %s: CHoCH-exit tertunda (%d order tertahan) — SL/TP tetap bekerja",
+                           HUNT_NAME,CSessionManager::SessionName(sc),nF);
+               continue;
+              }
+            double pnlFc=CollectRealizedPnl(sc);
+            if(nP>0 || nQ>0 || pnlFc!=0.0)
+               JournalClosedTrade(sc,g_plan[sc].dir,g_plan[sc].entry,g_plan[sc].sl,
+                                  g_plan[sc].lots,pnlFc);
+            PrintFormat("%s | %s: SWING exit — HTF CHoCH berlawanan (%d posisi, P/L %+.2f)",
+                        HUNT_NAME,CSessionManager::SessionName(sc),nP,pnlFc);
+            g_plan[sc].Reset();
+            g_lastBo[sc].time=0;
+            g_sessions.SetOrStatus(sc,ORB_STATUS_RANGING);
+            g_orb.Reset(sc);
+            AdvanceState(sc,HUNT_STATE_FORCE_CLOSED);
+            continue;
+           }
          if(g_plan[sc].pendingTicket!=0)
             g_exec.CancelOrder(g_plan[sc].pendingTicket,"HTF CHoCH reversal");
          g_plan[sc].Reset();
@@ -1352,7 +1413,7 @@ void OnTimer()
       secBar=MathMax(0,PeriodSeconds(_Period)-((int)(nowBrk-barT)));
    int secFc=0;
    string fcLabel="";
-   if(act>=0)
+   if(act>=0 && g_settings.forceCloseMinBefore>0)
      {
       secFc=MathMax(0,g_sessions.SecondsToForceClose(act,nowBrk));
       fcLabel="Force-close "+CSessionManager::SessionName(act)+":";
@@ -1360,6 +1421,8 @@ void OnTimer()
    if(g_dash.IsActive())
      {
       g_dash.UpdateOnTimer(secBar,PeriodSeconds(_Period),secFc,fcLabel);
+      if(g_settings.mode==HUNT_MODE_SWING)
+         g_dash.SetRow(HUNT_DASH_FORCECLOSE,"Force-close: SWING hold",clrGray);
       SNewsStatus ns=g_news.Status(nowBrk);
       g_dash.SetNewsTime(StringFormat("News data: %s %s",
                                       TimeToString(ns.lastFetchUtc,TIME_DATE|TIME_MINUTES),
@@ -1470,6 +1533,8 @@ int OnInit()
    RealtimeTick();
    PrintFormat("%s v%s init OK | TF=%s magic=%I64d pip=%.5f",HUNT_NAME,HUNT_VERSION,
                EnumToString(_Period),g_settings.magic,g_settings.pipSize);
+   if(g_settings.mode==HUNT_MODE_SWING)
+      PrintFormat("%s | MODE=SWING: force-close OFF, retest>=40 bar, SL buffer>=0.5xAtr, minRR>=2.5, TP1>=1.5R, pending-exp>=48 jam. Posisi CARRY overnight — perhitungkan SWAP. Chart disarankan H1/H4.",HUNT_NAME);
    return(INIT_SUCCEEDED);
   }
 

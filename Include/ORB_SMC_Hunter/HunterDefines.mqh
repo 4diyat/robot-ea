@@ -25,7 +25,7 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 
 //=== EA identity =====================================================
 #define HUNT_NAME             "ORB_SMC_Hunter"
-#define HUNT_VERSION          "1.01"
+#define HUNT_VERSION          "1.02"
 
 //=== Prefix objek chart (1 per kategori render) ======================
 #define HUNT_PREFIX_OR        "HUNT_OR_"     // garis opening range per sesi
@@ -133,6 +133,13 @@ enum ENUM_ENTRY_MODE
   {
    ENTRY_EXECUTION    = 0,       // market order setelah reaksi retest di closed bar
    ENTRY_PENDING_ORDER = 1       // limit di tepi zona, expiry berbasis bar
+  };
+
+//=== Mode trading (v1.02) ==============================================
+enum ENUM_HUNT_MODE
+  {
+   HUNT_MODE_INTRADAY = 0,       // sesi-anchored, force-close, tanpa overnight
+   HUNT_MODE_SWING    = 1        // hold overnight, jendela/stop lebih lebar
   };
 
 //=== Basis waktu input sesi ==========================================

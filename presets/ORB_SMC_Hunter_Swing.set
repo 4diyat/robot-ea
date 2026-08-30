@@ -1,6 +1,12 @@
-; ORB_SMC_Hunter v0.90 — preset ENTRY EXECUTION (market order setelah reaksi retest)
-; Beda dgn Default hanya di InpEntryMode=0 + skor sedikit lebih ketat (recompensation
-; utk eksekusi lambat): minRR naik, retest bars turun.
+; ORB SMC Hunter — SWING mode
+; pasang di chart H1 (atau H4); force-close OFF; posisi carry overnight (SWAP!)
+; ORB_SMC_Hunter v0.90 — preset DEFAULT (demo/live)
+; Semua sesi aktif, EntryMode=PENDING_ORDER(1), news ON, visual lengkap.
+; Catatan: InpGMTOffset=2 asumsi broker UTC+2 (sesuaikan!). Jam sesi = waktu BROKER.
+; enum: InpTimeBase 0=broker 1=UTC | InpRiskBase 0=balance 1=equity
+;       InpEntryMode 0=Execution 1=PendingOrder | InpDashboardCorner 0..3 (ENUM_BASE_CORNER)
+
+;--- Session
 InpEnableAsia=true
 InpAsiaStart=2
 InpAsiaEnd=8
@@ -12,43 +18,50 @@ InpNYStart=19
 InpNYEnd=3
 InpTimeBase=0
 InpGMTOffset=2
+;--- ORB
 InpRangeMinutes=30
 InpMinRangePips=0.0
 InpBreakoutBufferPips=0.0
 InpRequireBodyClose=true
+;--- SMC
 InpSwingLookback=3
 InpRequireLiquiditySweep=true
 InpRequireFVGRetest=true
-InpRetestMaxBars=8
-InpMaxExtensionBeforeRetest=40.0
+InpRetestMaxBars=10
+InpMaxExtensionBeforeRetest=50.0
 InpLiqTolerancePips=2.0
 InpUseFVGAsZone=true
 InpOBDisplacementAtr=1.0
-InpSLBufferAtrMult=0.2
+InpSLBufferAtrMult=0.5
 InpATRPeriod=14
 InpHTFTimeframe=16388
-InpMinConfluenceScore=65
-InpEntryMode=0
+;--- Confluence
+InpMinConfluenceScore=60
+;--- Entry
+InpEntryMode=1
+;--- Risk
 InpRiskPercent=0.5
 InpRiskBase=0
-InpMinRR=2.0
-InpTP1RR=1.0
+InpMinRR=2.5
+InpTP1RR=1.5
 InpPartialClosePct=50.0
 InpTrailAfterTP1=true
-InpMaxTradesPerDay=2
+InpMaxTradesPerDay=3
 InpMaxDailyLossPercent=3.0
-InpForceCloseMinutesBeforeEnd=30
+InpForceCloseMinutesBeforeEnd=0
 InpMaxSpreadPips=0.0
 InpMaxSlippagePoints=30
 InpPipSizeOverride=0.0
 InpOrderRetries=3
 InpOrderRetryDelayMs=500
-InpPendingExpireHours=24
-InpMode=0
+InpPendingExpireHours=72
+InpMode=1
 InpSwingCloseOnOppChoch=1
+;--- OB/OS (dashboard)
 InpOBOSPeriod=14
 InpOBOSUpperLevel=70.0
 InpOBOSLowerLevel=30.0
+;--- News
 InpEnableNewsFilter=true
 InpNewsRefreshHours=6
 InpIncludeMediumImpact=true
@@ -59,6 +72,7 @@ InpNewsFetchTimeoutMs=8000
 InpNewsCacheMaxAgeHours=48
 InpNewsTzShiftMin=0
 InpNewsUrlBase=https://sslecal2.investing.com
+;--- Visual
 InpShowOB=true
 InpShowFVG=true
 InpShowStructure=true
@@ -67,7 +81,8 @@ InpShowEntryArrows=true
 InpShowPivot=true
 InpShowVolumeProfile=true
 InpShowNewsMarkers=true
-InpMagicNumber=20260831
+;--- General
+InpMagicNumber=20260830
 InpShowDashboard=true
 InpDashboardCorner=0
 InpDashboardFontSize=9

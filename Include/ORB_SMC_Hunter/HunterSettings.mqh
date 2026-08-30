@@ -68,6 +68,8 @@ struct SHunterSettings
    int             orderRetries;
    int             orderRetryDelayMs;
    int             pendingExpireHours;     // utk simbol penolak GTC (kripto)
+   int             mode;                  // ENUM_HUNT_MODE
+   bool            swingCloseOnOppChoch;    // SWING: posisi ditutup saat CHoCH lawan
    //--- RSI OB/OS (info dashboard)
    int             obosPeriod;
    double          obosUpper;
@@ -141,6 +143,8 @@ void SettingsDefaults(SHunterSettings &s)
    s.orderRetries          = 3;
    s.orderRetryDelayMs     = 500;
    s.pendingExpireHours    = 24;
+   s.mode                    = 0;
+   s.swingCloseOnOppChoch    = true;
    s.obosPeriod            = 14;
    s.obosUpper             = 70.0;
    s.obosLower             = 30.0;
