@@ -130,12 +130,12 @@ private:
                   "exc_forecast,exc_previous&features=datepicker&calType=week&count=250"
                   "&timeZone=11"+(m_cfg.newsIncludeMedium ? "&importance=2,3" : "&importance=3");
       string headers="User-Agent: Mozilla/5.0\r\n";
-      uchar   post[];
-      uchar   recv[];
+      char    post[];
+      char    recv[];
       string  hdrOut;
       ArrayResize(post,0);
       ResetLastError();
-      int code=WebRequest(WEB_REQ_TYPE_GET,url,headers,(uint)m_cfg.newsFetchTimeoutMs,post,recv,hdrOut);
+      int code=WebRequest("GET",url,headers,m_cfg.newsFetchTimeoutMs,post,recv,hdrOut);
       if(code<=0)
         {
          m_lastError=StringFormat("WebRequest err=%d (cek Allow WebRequest URL)",GetLastError());
