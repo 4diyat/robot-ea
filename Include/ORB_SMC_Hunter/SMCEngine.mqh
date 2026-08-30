@@ -8,7 +8,8 @@
 //|    touches>=2 = equal highs/lows; swept saat wick menembus level      |
 //|    (break-close juga dianggap likuiditas terambil);                  |
 //|  - Struktur: label HH/HL/LH/LL + event BOS/CHoCH per swing patah;   |
-//|  - Bias HTF: arah break event struktur TERAKHIR pada cache HTF;     |
+//|  - Bias HTF: derive-once + LOCK; flip hanya via CHoCH (lihat       |
+//|    UpdateHtfBias) — bukan recalc tiap bar;                            |
 //|  - Zona: OB (candle berlawanan terakhir sebelum displacement ≥       |
 //|    obDisplacementAtr×ATR pasca break) + FVG (gap 3-candle) disatukan  |
 //|    dalam SZone — satu jalur retest/mitigasi/expiry.                   |
@@ -44,6 +45,13 @@ private:
    ulong               m_zoneSeq;
    ENUM_HUNT_BIAS      m_biasHtf;
    datetime            m_biasHtfTime;
+   //--- CHoCH-driven bias lock (spesifikasi HTF BIAS REVERSAL)
+   bool                m_biasPrimed;    // bias awal sudah diturunkan
+   double              m_chRefPrice;    // ref HL (bias bull) / LH (bias bear)
+   datetime            m_chRefTime;
+   int                 m_htfBarsSeen;   // jumlah bar HTF closed terakhir
+   SChochEvent         m_chEv;
+   bool                m_chEvReady;
    datetime            m_usedTimes[HUNT_USED_MEMO];   // persist antar-rebuild
    int                 m_usedCount;
 
@@ -376,15 +384,17 @@ private:
          m_zones[z]=zn;
         }
      }
-   void                BuildHtfBias(const CDataService &data)
+   //--- HTF bias: turunkan sekali, lalu kunci; flip HANYA via CHoCH HTF ------
+   /** Derivasi awal (retry per bar HTF s/d berhasil): arah break struktur
+       TERAKHIR pada cache HTF. Setelah primed, bias tidak dihitung ulang —
+       hanya berubah saat CheckHtfChoch mengonfirmasi pembalikan. */
+   void                DeriveInitialBias(const CDataService &data)
      {
-      m_biasHtf=HUNT_BIAS_NONE;
-      m_biasHtfTime=0;
       int nh=data.HtfClosedBars();
       int L=2;
       ENUM_HUNT_DIR lastDir=HUNT_DIR_NONE;
       datetime lastT=0;
-      for(int b=nh-1;b>=L;b--)                    // kronologis
+      for(int b=nh-1;b>=L;b--)                    // kronologis (tua→baru)
         {
          MqlRates c;
          if(!data.GetHtfBar(b,c))
@@ -400,36 +410,167 @@ private:
            }
          if(!hi && !lo)
             continue;
-         for(int s=b-1;s>=0;s--)                  // cari break pertama setelahnya
+         for(int s2=b-1;s2>=0;s2--)               // break pertama setelahnya
            {
             MqlRates x;
-            if(!data.GetHtfBar(s,x))
+            if(!data.GetHtfBar(s2,x))
                break;
             if(x.time<=c.time)
                continue;
             if(hi && x.close>c.high)
-              {
-               lastDir=HUNT_DIR_BUY;
-               lastT=x.time;
-               break;
-              }
+              { lastDir=HUNT_DIR_BUY;  lastT=x.time; break; }
             if(lo && x.close<c.low)
-              {
-               lastDir=HUNT_DIR_SELL;
-               lastT=x.time;
-               break;
-              }
+              { lastDir=HUNT_DIR_SELL; lastT=x.time; break; }
            }
         }
-      m_biasHtf=(lastDir==HUNT_DIR_BUY ? HUNT_BIAS_BULLISH :
-                 (lastDir==HUNT_DIR_SELL ? HUNT_BIAS_BEARISH : HUNT_BIAS_NONE));
+      if(lastDir==HUNT_DIR_NONE)
+         return;                                  // belum ada struktur → coba lg
+      m_biasHtf=(lastDir==HUNT_DIR_BUY ? HUNT_BIAS_BULLISH : HUNT_BIAS_BEARISH);
       m_biasHtfTime=lastT;
+      m_biasPrimed=true;
+      RefreshChochRef(data);
+     }
+   int                 ChochLookback(void) const
+     {
+      int L=(m_cfg.chochLookback>0 ? m_cfg.chochLookback : m_cfg.swingLookback);
+      return(MathMax(1,L));
+     }
+   /** Fractal confirmed pada index b (order siri: 0 = terbaru). */
+   bool                IsHtfSwing(const CDataService &data,const int b,const int L,
+                                  const bool high) const
+     {
+      MqlRates c;
+      if(!data.GetHtfBar(b,c))
+         return(false);
+      for(int k=1;k<=L;k++)
+        {
+         MqlRates a,z;
+         if(!data.GetHtfBar(b+k,a) || !data.GetHtfBar(b-k,z))
+            return(false);
+         if(high ? (a.high>=c.high || z.high>=c.high)
+                 : (a.low<=c.low   || z.low<=c.low))
+            return(false);
+        }
+      return(true);
+     }
+   /** Swing low TEAKHIR yang lebih tinggi dari swing low sebelumnya (HL). */
+   bool                FindLastReversalLow(const CDataService &data,const int L,
+                                            double &price,datetime &time) const
+     {
+      int nh=data.HtfClosedBars();
+      bool havePrev=false;
+      double prev=0.0;
+      price=0.0; time=0;
+      for(int b=nh-1-L;b>=L;b--)                  // tua→baru; hasil = HL terbaru
+        {
+         if(!IsHtfSwing(data,b,L,false))
+            continue;
+         MqlRates c;
+         if(!data.GetHtfBar(b,c))
+            break;
+         if(havePrev && c.low>prev)
+           { price=c.low; time=c.time; }
+         prev=c.low; havePrev=true;
+        }
+      return(price>0.0);
+     }
+   /** Swing high TERAKHIR yang lebih rendah dari swing high sebelumnya (LH). */
+   bool                FindLastReversalHigh(const CDataService &data,const int L,
+                                             double &price,datetime &time) const
+     {
+      int nh=data.HtfClosedBars();
+      bool havePrev=false;
+      double prev=0.0;
+      price=0.0; time=0;
+      for(int b=nh-1-L;b>=L;b--)
+        {
+         if(!IsHtfSwing(data,b,L,true))
+            continue;
+         MqlRates c;
+         if(!data.GetHtfBar(b,c))
+            break;
+         if(havePrev && c.high<prev)
+           { price=c.high; time=c.time; }
+         prev=c.high; havePrev=true;
+        }
+      return(price>0.0);
+     }
+   /** Sinkronkan level referensi CHoCH berikutnya dg struktur terkini. */
+   void                RefreshChochRef(const CDataService &data)
+     {
+      int L=ChochLookback();
+      double p=0.0;
+      datetime t=0;
+      bool ok=(m_biasHtf==HUNT_BIAS_BULLISH ? FindLastReversalLow(data,L,p,t)
+               :(m_biasHtf==HUNT_BIAS_BEARISH ? FindLastReversalHigh(data,L,p,t)
+                 : false));
+      if(ok)
+        { m_chRefPrice=p; m_chRefTime=t; }
+      else
+        { m_chRefPrice=0.0; m_chRefTime=0; }
+     }
+   /** SATU kali per HTF bar baru: update/ref/CHoCH. Closed bar saja. */
+   void                UpdateHtfBias(const CDataService &data)
+     {
+      int nh=data.HtfClosedBars();
+      if(nh<6)
+         return;
+      if(!m_biasPrimed)
+        {
+         DeriveInitialBias(data);
+         m_htfBarsSeen=nh;
+         return;
+        }
+      if(nh==m_htfBarsSeen)
+         return;                                   // tanpa bar HTF baru: dicek
+      m_htfBarsSeen=nh;
+      MqlRates c0;
+      if(!data.GetHtfBar(0,c0))
+         return;
+      int L=ChochLookback();
+      if(m_biasHtf==HUNT_BIAS_BULLISH)
+        {
+         double hl=0.0;
+         datetime ht=0;
+         if(FindLastReversalLow(data,L,hl,ht))
+           {
+            if(m_chRefPrice>0.0 && c0.close<m_chRefPrice)
+               FireHtfChoch(data,c0.time,m_chRefPrice,HUNT_DIR_BUY,HUNT_DIR_SELL);
+            else if(hl>m_chRefPrice || m_chRefPrice<=0.0)
+              { m_chRefPrice=hl; m_chRefTime=ht; }   // HL baru → ref naik
+           }
+        }
+      else if(m_biasHtf==HUNT_BIAS_BEARISH)
+        {
+         double lh=0.0;
+         datetime ht=0;
+         if(FindLastReversalHigh(data,L,lh,ht))
+           {
+            if(m_chRefPrice>0.0 && c0.close>m_chRefPrice)
+               FireHtfChoch(data,c0.time,m_chRefPrice,HUNT_DIR_SELL,HUNT_DIR_BUY);
+            else if(lh<m_chRefPrice || m_chRefPrice<=0.0)
+              { m_chRefPrice=lh; m_chRefTime=ht; }   // LH baru → ref turun
+           }
+        }
+     }
+   void                FireHtfChoch(const CDataService &data,const datetime t,
+                                    const double lvl,const ENUM_HUNT_DIR from,
+                                    const ENUM_HUNT_DIR to)
+     {
+      m_biasHtf=(to==HUNT_DIR_BUY ? HUNT_BIAS_BULLISH : HUNT_BIAS_BEARISH);
+      m_biasHtfTime=t;
+      m_chEv.time=t; m_chEv.price=lvl;
+      m_chEv.fromDir=from; m_chEv.toDir=to;
+      m_chEvReady=true;
+      RefreshChochRef(data);
      }
 
 public:
                      CSMCEngine(void) : m_fromTime(0), m_swingCount(0), m_poolCount(0),
                                         m_structCount(0), m_zoneCount(0), m_zoneSeq(1),
                                         m_biasHtf(HUNT_BIAS_NONE), m_biasHtfTime(0),
+                                        m_biasPrimed(false), m_chRefPrice(0.0), m_chRefTime(0),
+                                        m_htfBarsSeen(0), m_chEvReady(false),
                                         m_usedCount(0) {}
 
    bool              Init(const SHunterSettings &cfg,const datetime windowFrom)
@@ -450,11 +591,23 @@ public:
       BuildOrderBlocks(data);
       BuildFvgs(data);
       UpdateZonesVsBars(data);
-      BuildHtfBias(data);
+      UpdateHtfBias(data);
      }
 
    //--- query utk validator/renderer --------------------------------------
    ENUM_HUNT_BIAS    HtfBias(void) const      { return(m_biasHtf); }
+   /** Ambil event CHoCH HTF tertunda (main: cancel setup + alert + marker). */
+   bool              TakeHtfChoch(SChochEvent &ev)
+     {
+      if(!m_chEvReady)
+         return(false);
+      m_chEvReady=false;
+      ev=m_chEv;
+      m_chEv.Reset();
+      return(true);
+     }
+   /** Level referensi CHoCH aktif (HL utk bull / LH utk bear; 0 = belum ada). */
+   double            ChochRefPrice(void) const  { return(m_chRefPrice); }
    datetime          HtfBiasTime(void) const  { return(m_biasHtfTime); }
    string            HtfBiasText(void) const
      {
@@ -612,6 +765,12 @@ public:
       m_usedCount=0;
       m_biasHtf=HUNT_BIAS_NONE;
       m_biasHtfTime=0;
+      m_biasPrimed=false;
+      m_chRefPrice=0.0;
+      m_chRefTime=0;
+      m_htfBarsSeen=0;
+      m_chEv.Reset();
+      m_chEvReady=false;
      }
   };
 

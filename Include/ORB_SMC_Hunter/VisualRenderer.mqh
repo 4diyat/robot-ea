@@ -429,6 +429,20 @@ public:
                     fillTime+86400);
      }
 
+   /** 5b. Penanda CHoCH HTF (bias reversal) — dipanggil main saat event. */
+   void                RenderHtfChoch(const datetime t,const double price,
+                                      const ENUM_HUNT_DIR newDir)
+     {
+      if(!m_cfg.showStructure)
+         return;
+      string nm=HUNT_PREFIX_STR+"htfc"+IntegerToString((long)t);
+      DrawArrow(nm,t,price,(newDir==HUNT_DIR_BUY ? 233 : 234),clrOrange,
+                (newDir==HUNT_DIR_BUY ? ANCHOR_BOTTOM : ANCHOR_TOP),HUNT_LED_STR,0);
+      DrawTextLabel(nm+"l",t,price,
+                    StringFormat("CHoCH HTF → %s",(newDir==HUNT_DIR_BUY ? "Bullish" : "Bearish")),
+                    clrOrange,8,ANCHOR_LOWER,HUNT_LED_STR,0);
+     }
+
    /** 6. Pivot harian (awal hari) — garis tipis + label ujung kanan. */
    void              RenderPivots(const CDataService &data,const datetime dayBroker)
      {

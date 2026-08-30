@@ -30,6 +30,8 @@ struct SHunterSettings
    bool            requireBodyClose;     // wick-only tidak dihitung
    //--- SMC
    int             swingLookback;        // kiri=kanan, closed-bar only
+   int             chochLookback;        // validasi CHoCH HTF (0=swingLookback)
+   int             chochAlertMin;        // durasi alert CHoCH di dashboard
    bool            requireLiquiditySweep;
    bool            requireRetest;        // wajib retest zona (no direct entry)
    int             retestMaxBars;
@@ -90,6 +92,7 @@ struct SHunterSettings
    bool            showDashboard;
    int             dashCorner;           // nilai ENUM_BASE_CORNER 0..3
    int             dashFontSize;
+   int             perfLookbackDays;       // jendela section Performa
   };
 
 //--- Nilai default (diganti oleh SnapshotSettings di EA utama) ---------
@@ -102,6 +105,8 @@ void SettingsDefaults(SHunterSettings &s)
    s.breakoutBufferPips    = 0.0;
    s.requireBodyClose      = true;
    s.swingLookback         = 3;
+   s.chochLookback         = 0;
+   s.chochAlertMin         = 60;
    s.requireLiquiditySweep = true;
    s.requireRetest         = true;
    s.retestMaxBars         = 10;
@@ -154,6 +159,7 @@ void SettingsDefaults(SHunterSettings &s)
    s.showDashboard         = true;
    s.dashCorner            = 0;   // CORNER_LEFT_UPPER
    s.dashFontSize          = 9;
+   s.perfLookbackDays      = 7;
    for(int i=0;i<HUNT_SESSION_COUNT;i++)
      {
       s.enableSession[i]   = true;

@@ -52,6 +52,10 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 #define HUNT_COL_NEWS_HIGH    clrRed
 #define HUNT_COL_NEWS_MED     clrOrangeRed
 #define HUNT_COL_TEXT         clrGainsboro
+#define HUNT_COL_AMD_ACC      C'0,150,136'   // teal   — Accumulation
+#define HUNT_COL_AMD_MAN      C'255,111,97'  // coral  — Manipulation
+#define HUNT_COL_AMD_DIS      C'155,89,182'  // purple — Distribution
+#define HUNT_COL_AMD_DONE     C'117,117,117' // gray   — Selesai
 #define HUNT_COL_DASH_BG      C'16,22,34'
 #define HUNT_COL_DASH_BORDER  C'70,88,118'
 
@@ -196,28 +200,42 @@ enum ENUM_HUNT_NEWS_IMPACT
 //=== Baris dashboard (indeks tetap — panel dibuat sekali, isi di-diff)|
 enum ENUM_HUNT_DASH_ROW
   {
-   HUNT_DASH_HDR = 0,             // header + versi
-   // --- Section Sesi & Range
-   HUNT_DASH_SESSION_ACTIVE,      // sesi aktif + sisa waktu sesi
-   HUNT_DASH_RANGE_ASIA,          // H/L/pips + status Asia
-   HUNT_DASH_RANGE_LONDON,        // H/L/pips + status London
-   HUNT_DASH_RANGE_NY,            // H/L/pips + status NY
-   HUNT_DASH_CANDLE_TIMER,        // countdown close bar mm:ss
-   // --- Section Struktur & Sinyal
-   HUNT_DASH_HTF_BIAS,            // bias H1/H4
-   HUNT_DASH_STATE,               // state machine sesi aktif (diwarnai)
-   HUNT_DASH_SIGNAL,              // arah breakout + sweep + OB/FVG flags
-   HUNT_DASH_RETEST_CD,           // sisa bar retest / extension %
-   HUNT_DASH_OBOS,                // RSI value + Overbought/Oversold/Neutral
-   // --- Section Posisi & Risiko
-   HUNT_DASH_POSITION,            // arah/lot/entry/SL/TP/PL(u)/PL(%)
-   HUNT_DASH_PENDING,             // level limit + sisa bar expiry (mode pending)
-   HUNT_DASH_FORCECLOSE,          // countdown force-close sesi berjalan
-   HUNT_DASH_TODAY,               // trade n/max + daily P/L% vs max loss
-   // --- Section News
-   HUNT_DASH_NEWS_STATE,          // aktif/nonaktif/stale + event+countdown
-   HUNT_DASH_NEWS_UPDATED,        // waktu fetch terakhir
-   HUNT_DASH_ROWS_TOTAL
+   HUNT_DASH_HDR = 0,                // header + versi
+   //--- Section Sesi & Range
+   HUNT_DASH_SESSION_ACTIVE,         // sesi aktif + sisa waktu
+   HUNT_DASH_RANGE_ASIA,             // H/L/pips + status Asia
+   HUNT_DASH_RANGE_LONDON,           // H/L/pips + status London
+   HUNT_DASH_RANGE_NY,               // H/L/pips + status NY
+   HUNT_DASH_CANDLE_TIMER,           // countdown close bar mm:ss
+   //--- Section Struktur & Sinyal
+   HUNT_DASH_AMD,                    // fase siklus AMD (badge warna)
+   HUNT_DASH_CHOCH,                  // alert CHoCH HTF terbaru (N menit)
+   HUNT_DASH_HTF_BIAS,               // bias HTF
+   HUNT_DASH_STATE,                  // state machine (label teknis)
+   HUNT_DASH_SIGNAL,                 // sinyal SMC terakhir
+   HUNT_DASH_RETEST_CD,              // sisa bar retest / extension %
+   HUNT_DASH_OBOS,                   // RSI + Overbought/Oversold/Neutral
+   //--- Section Confluence Checklist (read-only)
+   HUNT_DASH_CHK_BIAS,               // HTF bias searah
+   HUNT_DASH_CHK_SWEEP,              // liquidity sweep terkonfirmasi
+   HUNT_DASH_CHK_BODY,               // body close valid di luar range
+   HUNT_DASH_CHK_RETEST,             // reaksi retest / status pending
+   HUNT_DASH_CHK_NEWS,               // news window aman
+   HUNT_DASH_CHK_SUM,                // N/5 syarat terpenuhi
+   //--- Section Posisi & Risiko
+   HUNT_DASH_POSITION,               // arah/lot/entry/SL/TP/PL
+   HUNT_DASH_PENDING,                // level limit + sisa bar expiry
+   HUNT_DASH_FORCECLOSE,             // countdown force-close sesi
+   HUNT_DASH_TODAY,                   // trade n/max + daily P/L
+   //--- Section News
+   HUNT_DASH_NEWS_STATE,             // status + event + countdown
+   HUNT_DASH_NEWS_UPDATED,           // waktu fetch terakhir
+   //--- Section Performa (riwayat transaksi EA)
+   HUNT_DASH_PERF_SUMMARY,           // win rate | avgR | total (lookback)
+   HUNT_DASH_PERF_T1,                // trade terakhir -3
+   HUNT_DASH_PERF_T2,                // trade terakhir -2
+   HUNT_DASH_PERF_T3,                // trade terakhir -1
+   HUNT_DASH_ROWS_TOTAL              // = jumlah baris; WAJIB terakhir
   };
 
 //=== Kategori ledger objek renderer ==================================
@@ -358,6 +376,21 @@ struct SSMCContext
    double            extensionPct;     // % range yang sudah ditempuh saat ini
    double            rsi;              // info dashboard; bukan gate kecuali diminta
    bool              rsiExtreme;       // overbought/oversold searah breakout
+  };
+
+//+------------------------------------------------------------------+
+//| Event CHoCH HTF (bias reversal) — dikonsumsi main utk cancel setup.  |
+//+------------------------------------------------------------------+
+struct SChochEvent
+  {
+   datetime        time;          // waktu bar HTF close yg mematahkan ref
+   double          price;         // level referensi yg dipatahkan
+   ENUM_HUNT_DIR   fromDir;       // arah bias lama
+   ENUM_HUNT_DIR   toDir;         // arah bias baru
+   void            Reset(void)
+     {
+      time=0; price=0.0; fromDir=HUNT_DIR_NONE; toDir=HUNT_DIR_NONE;
+     }
   };
 
 //--- Rencana trade lengkap (dibuat validator, dieksekusi TradeExecutor) |

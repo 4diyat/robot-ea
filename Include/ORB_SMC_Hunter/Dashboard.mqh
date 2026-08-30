@@ -5,9 +5,9 @@
 //| saja (ObjectSetString/SetInteger pada objek existing — tidak       |
 //| pernah re-create). Baris mengikuti ENUM_HUNT_DASH_ROWS_TOTAL.      |
 //|                                                                  |
-//| Cadence (kontrak): UpdateOnBar utk data berat-per-bar;            |
-//| UpdateOnTick utk posisi/P/L/RSI/news; UpdateOnTimer (EventSetTimer |
-//| 1s) utk countdown candle & force-close — BUKAN dihitung tiap tick. |
+//| Cadence (kontrak): main memanggil SetRow utk baris per-bar &         |
+//| per-tick (diff-only, tanpa wrapper); UpdateOnTimer (EventSetTimer     |
+//| 1s) utk countdown candle & force-close — BUKAN dihitung tiap tick.   |
 //|                                                                  |
 //| CATATAN TRANSPARANSI: MT5 tidak mendukung alpha pada window object; |
 //| "semi-transparan" diemu- lasikan via bg gelap solid + panel di       |
@@ -32,18 +32,6 @@ private:
    string              m_rowText[HUNT_DASH_ROWS_TOTAL];
    color               m_rowColor[HUNT_DASH_ROWS_TOTAL];
 
-   /** Diff-only setter: skip bila teks+warna identik (hemat repaint). */
-   void                SetRow(const int row,const string text,const color clr)
-     {
-      if(row<0 || row>=HUNT_DASH_ROWS_TOTAL)
-         return;
-      if(m_rowText[row]==text && m_rowColor[row]==clr)
-         return;
-      m_rowText[row]=text;
-      m_rowColor[row]=clr;
-      ObjectSetString(0,m_rowNames[row],OBJPROP_TEXT,text);
-      ObjectSetInteger(0,m_rowNames[row],OBJPROP_COLOR,clr);
-     }
    /** Letak ulang label utk corner terpilih. */
    void                PlaceObj(const string nm,const int idx)
      {
@@ -55,20 +43,6 @@ private:
       int y=(corner==CORNER_LEFT_UPPER || corner==CORNER_RIGHT_UPPER ? HUNT_DASH_H0
              : -(HUNT_DASH_H0+HUNT_DASH_ROWS_TOTAL*HUNT_DASH_LNH+10));
       ObjectSetInteger(0,nm,OBJPROP_YDISTANCE,y+HUNT_DASH_PAD+idx*HUNT_DASH_LNH);
-     }
-   color               StateColor(const int state) const
-     {
-      switch(state)
-        {
-         case HUNT_STATE_READY_ENTRY:        return(HUNT_COL_READY);
-         case HUNT_STATE_WAIT_RETEST:
-         case HUNT_STATE_WAIT_BREAKOUT:      return(HUNT_COL_WAIT);
-         case HUNT_STATE_BREAKOUT_CONFIRMED: return(clrDeepSkyBlue);
-         case HUNT_STATE_MANAGING:           return(clrPaleGreen);
-         case HUNT_STATE_RANGE_FORMING:      return(clrSilver);
-         case HUNT_STATE_FORCE_CLOSED:       return(clrOrangeRed);
-        }
-      return(clrGray);
      }
    static string       StatusText(const SOpenRange &r)
      {
@@ -155,50 +129,7 @@ public:
      }
    bool              IsActive(void) const { return(m_cfg.showDashboard && m_built); }
 
-   //+---------------------------------------------------------------+
-   //| Per bar baru: sesi, OR per sesi + status, bias, state, sinyal,     |
-   //| countdown retest. Semua argumen sudah diformat pemanggil (EA) —    |
-   //| panel tidak kenal modul lain (decoupled).                           |
-   //+---------------------------------------------------------------+
-   void              UpdateOnBar(const string sessionLine,const string rangeAsiaLine,
-                                 const string rangeLonLine,const string rangeNyLine,
-                                 const string biasLine,const string stateLine,const int stateVal,
-                                 const string signalLine,const string retestCdLine)
-     {
-      if(!IsActive())
-         return;
-      SetRow(HUNT_DASH_SESSION_ACTIVE,sessionLine,HUNT_COL_TEXT);
-      SetRow(HUNT_DASH_RANGE_ASIA,rangeAsiaLine,HUNT_COL_TEXT);
-      SetRow(HUNT_DASH_RANGE_LONDON,rangeLonLine,HUNT_COL_TEXT);
-      SetRow(HUNT_DASH_RANGE_NY,rangeNyLine,HUNT_COL_TEXT);
-      SetRow(HUNT_DASH_HTF_BIAS,biasLine,
-             (StringFind(biasLine,"Bullish")>=0 ? HUNT_COL_BULL :
-              (StringFind(biasLine,"Bearish")>=0 ? HUNT_COL_BEAR : clrGray)));
-      SetRow(HUNT_DASH_STATE,stateLine,StateColor(stateVal));
-      SetRow(HUNT_DASH_SIGNAL,signalLine,HUNT_COL_TEXT);
-      SetRow(HUNT_DASH_RETEST_CD,retestCdLine,(retestCdLine=="" ? clrGray : HUNT_COL_WAIT));
-     }
-   /** Per tick (murah): posisi/pending/OBOS/news. pass "" = tak berubah. */
-   void              UpdateOnTick(const string posLine,const string pendingLine,
-                                  const string obosLine,const string newsLine,
-                                  const string todayLine)
-     {
-      if(!IsActive())
-         return;
-      if(posLine!="")
-         SetRow(HUNT_DASH_POSITION,posLine,HUNT_COL_WAIT);
-      if(pendingLine!="")
-         SetRow(HUNT_DASH_PENDING,pendingLine,clrDeepSkyBlue);
-      if(obosLine!="")
-         SetRow(HUNT_DASH_OBOS,obosLine,HUNT_COL_TEXT);
-      if(newsLine!="")
-         SetRow(HUNT_DASH_NEWS_STATE,newsLine,
-                (StringFind(newsLine,"BLOCK")>=0 ? clrRed :
-                 (StringFind(newsLine,"STALE")>=0 || StringFind(newsLine,"NO DATA")>=0 ? clrOrange : clrGray)));
-      if(todayLine!="")
-         SetRow(HUNT_DASH_TODAY,todayLine,HUNT_COL_TEXT);
-     }
-   /** Per detik (OnTimer): countdown candle + force-close. */
+      /** Per detik (OnTimer): countdown candle + force-close. */
    void              UpdateOnTimer(const int secToBarClose,const int secToForceClose,
                                    const string fcLabel)
      {
@@ -215,6 +146,55 @@ public:
         }
       else
          SetRow(HUNT_DASH_FORCECLOSE,"Force-close: n/a",clrGray);
+     }
+   //+---------------------------------------------------------------+
+   //| API utama: SetRow per id baris — diff-only (skip bila identik)    |
+   //| sehingga tidak pernah ada re-create/repaint objek tanpa perlu.     |
+   //+---------------------------------------------------------------+
+   /** Update SATU baris (objek sudah dibuat BuildLayout). */
+   void                SetRow(const int row,const string text,const color clr=HUNT_COL_TEXT)
+     {
+      if(!IsActive())
+         return;
+      if(row<0 || row>=HUNT_DASH_ROWS_TOTAL)
+         return;
+      if(m_rowText[row]==text && m_rowColor[row]==clr)
+         return;
+      m_rowText[row]=text;
+      m_rowColor[row]=clr;
+      ObjectSetString(0,m_rowNames[row],OBJPROP_TEXT,text);
+      ObjectSetInteger(0,m_rowNames[row],OBJPROP_COLOR,clr);
+     }
+   /** Warna konsisten utk label state machine (sinkron palet renderer). */
+   static color        StateColor(const int state)
+     {
+      switch(state)
+        {
+         case HUNT_STATE_READY_ENTRY:        return(HUNT_COL_READY);
+         case HUNT_STATE_WAIT_RETEST:
+         case HUNT_STATE_WAIT_BREAKOUT:      return(HUNT_COL_WAIT);
+         case HUNT_STATE_BREAKOUT_CONFIRMED: return(clrDeepSkyBlue);
+         case HUNT_STATE_MANAGING:           return(clrPaleGreen);
+         case HUNT_STATE_RANGE_FORMING:      return(clrSilver);
+         case HUNT_STATE_FORCE_CLOSED:       return(clrOrangeRed);
+        }
+      return(clrGray);
+     }
+   /** Teks status OR (dipakai formatter baris range). */
+   static color        BiasColor(const ENUM_HUNT_BIAS b)
+     {
+      if(b==HUNT_BIAS_BULLISH)
+         return(HUNT_COL_BULL);
+      if(b==HUNT_BIAS_BEARISH)
+         return(HUNT_COL_BEAR);
+      return(clrGray);
+     }
+   /** Warna baris checklist: ok=lime, gagal=indianred, tanpa setup=gray. */
+   static color        ChkColor(const bool hasDir,const bool ok)
+     {
+      if(!hasDir)
+         return(clrGray);
+      return(ok ? clrLimeGreen : clrIndianRed);
      }
    void              SetNewsTime(const string line)
      {

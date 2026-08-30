@@ -54,6 +54,8 @@ input bool                InpRequireBodyClose = true;           // Wajib body-cl
 
 input group "=== SMC Settings ==="
 input int                 InpSwingLookback   = 3;               // Swing lookback kiri/kanan (bar closed)
+input int                 InpCHoCHSwingLookback = 0;            // Lookback validasi CHoCH HTF (0=InpSwingLookback)
+input int                 InpCHoCHAlertMinutes = 60;            // Baris alert CHoCH di dashboard (menit)
 input bool                InpRequireLiquiditySweep = true;      // Wajib sweep pool searah breakout
 input bool                InpRequireFVGRetest = true;          // Wajib retest OB/FVG (false=opt-in entry langsung!)
 input int                 InpRetestMaxBars   = 10;              // Maks bar menunggu retest (invalidasi/expiry)
@@ -118,6 +120,7 @@ input long                InpMagicNumber     = 20260830;        // Magic number 
 input bool                InpShowDashboard   = true;            // Tampilkan dashboard
 input ENUM_BASE_CORNER    InpDashboardCorner = CORNER_LEFT_UPPER; // Pojok panel
 input int                 InpDashboardFontSize = 9;             // Font size panel (6..12)
+input int                 InpPerformanceLookbackDays = 7;   // Jendela section Performa (hari)
 
 #include <ORB_SMC_Hunter\DataService.mqh>
 #include <ORB_SMC_Hunter\SessionManager.mqh>
@@ -149,6 +152,10 @@ ENUM_HUNT_STATE      g_state[HUNT_SESSION_COUNT];    // state machine PER SESI
 SSignalPlan          g_plan[HUNT_SESSION_COUNT];     // plan aktif per sesi
 SBreakout            g_lastBo[HUNT_SESSION_COUNT];   // info utk dashboard
 SSMCContext          g_lastCtx[HUNT_SESSION_COUNT];  // info utk dashboard
+datetime               g_chochTime=0;                 // CHoCH HTF terbaru
+ENUM_HUNT_DIR          g_chochFrom=HUNT_DIR_NONE;
+ENUM_HUNT_DIR          g_chochTo=HUNT_DIR_NONE;
+string                 g_perfFile="";                 // jurnal trade (csv)
 datetime             g_lastPnlScan[HUNT_SESSION_COUNT]; // anti double-count P/L
 bool                 g_timerOn=false;
 
@@ -156,6 +163,15 @@ bool                 g_timerOn=false;
 bool     SnapshotSettings(SHunterSettings &s);
 void     StateToString(const ENUM_HUNT_STATE st,string &dst);
 void     AdvanceState(const int session,const ENUM_HUNT_STATE to);
+
+//--- dashboard/performa/jurnal — forward decl (definisi pasca BuildSignalLine)
+void     AmdPhaseLabel(const int session,const datetime nowBrk,string &lbl,color &col);
+void     DashChk(const int row,const string label,const bool hasDir,const bool ok);
+void     UpdateChecklistRows(const int act,const datetime nowBrk);
+void     UpdateBarDashboard(const datetime nowBrk);
+void     JournalClosedTrade(const int session,const ENUM_HUNT_DIR dir,const double entry,
+                            const double sl,const double lots,const double pnl);
+void     UpdatePerformanceSection(void);
 string   GetStateLabel(const int s);
 double   ExtensionPct(const SOpenRange &r,const ENUM_HUNT_DIR dir,const double price);
 void     FillSmcContext(const int s,const SOpenRange &r,const ENUM_HUNT_DIR dir,
@@ -186,6 +202,9 @@ bool SnapshotSettings(SHunterSettings &s)
    s.breakoutBufferPips   =InpBreakoutBufferPips;
    s.requireBodyClose     =InpRequireBodyClose;
    s.swingLookback        =InpSwingLookback;
+   s.chochLookback        = InpCHoCHSwingLookback;
+   s.chochAlertMin        = MathMax(5,InpCHoCHAlertMinutes);
+   s.perfLookbackDays     = MathMax(1,InpPerformanceLookbackDays);
    s.requireLiquiditySweep=InpRequireLiquiditySweep;
    s.requireRetest        =InpRequireFVGRetest;
    s.retestMaxBars        =InpRetestMaxBars;
@@ -445,7 +464,7 @@ void InvalidateSetup(const int s,const string why)
 //| Tarik realized P/L dari history (deals OUT magic EA) tanpa          |
 //| double-count (memo g_lastPnlScan per sesi). Update RiskManager.     |
 //+------------------------------------------------------------------+
-void CollectRealizedPnl(const int s)
+double CollectRealizedPnl(const int s)
   {
    if(s<0 || s>=HUNT_SESSION_COUNT)
       return;
@@ -477,6 +496,7 @@ void CollectRealizedPnl(const int s)
       PrintFormat("%s | %s: realized P/L %+.2f (hari ini %+.2f)",HUNT_NAME,
                   CSessionManager::SessionName(s),sum,g_risk.DailyPnl());
      }
+   return(sum);
   }
 
 //+------------------------------------------------------------------+
@@ -490,6 +510,345 @@ string BuildSignalLine(const int s)
    return(StringFormat("Last %s | sweep %s | zona %s",
                        dirTxt,(g_lastCtx[s].sweptInDirection ? "yes" : "no"),
                        (g_lastCtx[s].zoneFound ? EnumToString(g_lastCtx[s].zoneType) : "none")));
+  }
+
+//+------------------------------------------------------------------+
+//| Label fase siklus AMD utk dashboard (badge; warna = palet spec).   |
+//+------------------------------------------------------------------+
+void AmdPhaseLabel(const int session,const datetime nowBrk,string &lbl,color &col)
+  {
+   if(session<0)
+     {
+      lbl="AMD: —"; col=clrGray;
+      return;
+     }
+   int st=(int)g_state[session];
+   if(st==HUNT_STATE_BREAKOUT_CONFIRMED)
+     {
+      lbl="AMD: Manipulation"; col=HUNT_COL_AMD_MAN;
+      return;
+     }
+   if(st==HUNT_STATE_WAIT_RETEST || st==HUNT_STATE_READY_ENTRY ||
+      st==HUNT_STATE_MANAGING)
+     {
+      lbl="AMD: Distribution"; col=HUNT_COL_AMD_DIS;
+      return;
+     }
+   if(st==HUNT_STATE_FORCE_CLOSED)
+     {
+      lbl="AMD: Selesai"; col=HUNT_COL_AMD_DONE;
+      return;
+     }
+   //--- IDLE/RANGE_FORMING/WAIT_BREAKOUT → Accumulation; sesi selesai hari ini
+   //--- dengan range terbentuk = siklus lengkap → Selesai.
+   if(!g_sessions.IsSessionLive(session,nowBrk))
+     {
+      SOpenRange rr;
+      if(g_sessions.GetRange(session,rr) && rr.formed)
+        {
+         lbl="AMD: Selesai"; col=HUNT_COL_AMD_DONE;
+         return;
+        }
+     }
+   lbl="AMD: Accumulation"; col=HUNT_COL_AMD_ACC;
+  }
+
+//+------------------------------------------------------------------+
+//| Satu baris checklist: ✓/✗ + label; '·' bila belum ada setup arah.   |
+//+------------------------------------------------------------------+
+void DashChk(const int row,const string label,const bool hasDir,const bool ok)
+  {
+   g_dash.SetRow(row,(hasDir ? (ok ? "OK  " : "xx  ") : "..  ")+label,
+                 CHunterDashboard::ChkColor(hasDir,ok));
+  }
+
+//+------------------------------------------------------------------+
+//| Section Confluence Checklist — READ-ONLY, mencerminkan evaluasi     |
+//| terakhir (g_lastBo/g_lastCtx/g_plan) + status berita live. Tidak     |
+//| mengubah logika ConfluenceValidator.                                 |
+//+------------------------------------------------------------------+
+void UpdateChecklistRows(const int act,const datetime nowBrk)
+  {
+   if(!g_dash.IsActive())
+      return;
+   ENUM_HUNT_DIR dir=HUNT_DIR_NONE;
+   if(act>=0)
+     {
+      if(g_plan[act].dir!=HUNT_DIR_NONE)
+         dir=g_plan[act].dir;
+      else if(g_lastBo[act].time!=0)
+         dir=g_lastBo[act].dir;
+     }
+   bool  hd =(dir!=HUNT_DIR_NONE);
+   int   met=0;
+   //--- 1. HTF bias searah arah setup
+   ENUM_HUNT_BIAS b=g_smc.HtfBias();
+   bool c1=(hd && ((b==HUNT_BIAS_BULLISH && dir==HUNT_DIR_BUY) ||
+                   (b==HUNT_BIAS_BEARISH && dir==HUNT_DIR_SELL)));
+   if(c1)
+      met++;
+   DashChk(HUNT_DASH_CHK_BIAS,"HTF bias searah",hd,c1);
+   //--- 2. liquidity sweep searah terkonfirmasi
+   bool c2=(hd && g_lastCtx[act].sweptInDirection);
+   if(c2)
+      met++;
+   DashChk(HUNT_DASH_CHK_SWEEP,"Liquidity sweep terkonfirmasi",hd,c2);
+   //--- 3. body close valid di luar range
+   bool c3=(hd && (g_lastBo[act].bodyClose || !g_settings.requireBodyClose));
+   if(c3)
+      met++;
+   DashChk(HUNT_DASH_CHK_BODY,"Body close valid di luar range",hd,c3);
+   //--- 4. reaksi retest (execution) ATAU status pending (pending mode)
+   bool   c4=(hd && !g_settings.requireRetest);
+   string l4="Reaksi retest di OB/FVG";
+   if(hd)
+     {
+      if(g_settings.entryMode==ENTRY_PENDING_ORDER)
+        {
+         if(g_plan[act].submitted)
+           {
+            l4="Pending order: filled"; c4=true;
+           }
+         else if(g_plan[act].pendingTicket!=0)
+           {
+            l4=StringFormat("Pending order: menunggu fill (exp %dbar)",
+                            g_exec.PendingBarsLeft(g_plan[act],g_data));
+            c4=true;
+           }
+         else
+            l4="Pending order: belum terpasang";
+        }
+      else if(!g_settings.requireRetest)
+         l4="Retest tidak diwajibkan (opt-in)";
+      else
+        {
+         int st=(int)g_state[act];
+         if(st==HUNT_STATE_READY_ENTRY || st==HUNT_STATE_MANAGING)
+           {
+            l4="Reaksi retest di OB/FVG: OK"; c4=true;
+           }
+         else if(st==HUNT_STATE_WAIT_RETEST)
+            l4="Reaksi retest: menunggu";
+        }
+     }
+   if(c4)
+      met++;
+   DashChk(HUNT_DASH_CHK_RETEST,l4,hd,c4);
+   //--- 5. news window aman
+   string nlab;
+   bool   blocked=(g_settings.newsEnabled && g_news.IsEntryBlocked(nowBrk,nlab));
+   bool   c5=!blocked;
+   if(c5)
+      met++;
+   DashChk(HUNT_DASH_CHK_NEWS,
+           (blocked ? "News window: BLOCK ("+nlab+")" : "News window aman"),hd,c5);
+   g_dash.SetRow(HUNT_DASH_CHK_SUM,
+                 StringFormat("Confluence: %d/5 syarat terpenuhi%s",met,
+                              (hd ? "" : "  (belum ada setup)")),
+                 (!hd ? clrGray :
+                  (met>=4 ? clrLimeGreen : (met>=3 ? HUNT_COL_WAIT : clrIndianRed))));
+  }
+
+//+------------------------------------------------------------------+
+//| Refresh baris berat-dashboard per bar closed (dipanggil juga pasca   |
+//| CHoCH & saat init).                                                  |
+//+------------------------------------------------------------------+
+void UpdateBarDashboard(const datetime nowBrk)
+  {
+   if(!g_dash.IsActive())
+      return;
+   SOpenRange ra,rl,rn;
+   g_sessions.GetRange(HUNT_SESSION_ASIA,ra);
+   g_sessions.GetRange(HUNT_SESSION_LONDON,rl);
+   g_sessions.GetRange(HUNT_SESSION_NY,rn);
+   int act=g_sessions.ActiveSession(nowBrk);
+   string sess="Session: none";
+   if(act>=0)
+     {
+      int toEnd=g_sessions.SecondsToSessionEnd(act,nowBrk);
+      sess=StringFormat("Session: %s | %.0f mnt lagi",
+                         CSessionManager::SessionName(act),MathMax(0,toEnd)/60.0);
+     }
+   g_dash.SetRow(HUNT_DASH_SESSION_ACTIVE,sess);
+   g_dash.SetRow(HUNT_DASH_RANGE_ASIA,
+                 CHunterDashboard::FormatRangeLine("Asia",ra,g_data.PipSize(),g_data.Digits()),
+                 CSessionManager::SessionColor(HUNT_SESSION_ASIA));
+   g_dash.SetRow(HUNT_DASH_RANGE_LONDON,
+                 CHunterDashboard::FormatRangeLine("London",rl,g_data.PipSize(),g_data.Digits()),
+                 CSessionManager::SessionColor(HUNT_SESSION_LONDON));
+   g_dash.SetRow(HUNT_DASH_RANGE_NY,
+                 CHunterDashboard::FormatRangeLine("NY",rn,g_data.PipSize(),g_data.Digits()),
+                 CSessionManager::SessionColor(HUNT_SESSION_NY));
+   //--- badge fase AMD
+   string amd;
+   color  amdCol;
+   AmdPhaseLabel(act,nowBrk,amd,amdCol);
+   g_dash.SetRow(HUNT_DASH_AMD,amd,amdCol);
+   //--- alert CHoCH HTF terbaru (hilang setelah chochAlertMin menit)
+   string choch="--";
+   color  ccol=clrGray;
+   if(g_chochTime>0 && (nowBrk-g_chochTime)<=g_settings.chochAlertMin*60)
+     {
+      choch=StringFormat("! CHoCH: %s -> %s, %s",
+                         (g_chochFrom==HUNT_DIR_BUY ? "Bullish" : "Bearish"),
+                         (g_chochTo==HUNT_DIR_BUY ? "Bullish" : "Bearish"),
+                         TimeToString(g_chochTime,TIME_DATE|TIME_MINUTES));
+      ccol=clrOrange;
+     }
+   g_dash.SetRow(HUNT_DASH_CHOCH,choch,ccol);
+   //--- bias + state teknis + sinyal + countdown retest
+   g_dash.SetRow(HUNT_DASH_HTF_BIAS,
+                 "HTF bias ("+EnumToString(g_settings.htf)+"): "+g_smc.HtfBiasText(),
+                 CHunterDashboard::BiasColor(g_smc.HtfBias()));
+   g_dash.SetRow(HUNT_DASH_STATE,"State: "+GetStateLabel(act),
+                 CHunterDashboard::StateColor(act>=0 ? (int)g_state[act] : HUNT_STATE_IDLE));
+   g_dash.SetRow(HUNT_DASH_SIGNAL,(act>=0 ? BuildSignalLine(act) : "Signal: --"));
+   string cdLine="";
+   if(act>=0 && g_state[act]==HUNT_STATE_WAIT_RETEST)
+     {
+      SOpenRange r;
+      if(g_sessions.GetRange(act,r))
+        {
+         double px=(r.breakoutDir==HUNT_DIR_BUY ? g_data.Bid() : g_data.Ask());
+         cdLine=StringFormat("Retest: %d bar sisa | ext %.0f%%",
+                             MathMax(0,g_settings.retestMaxBars-r.barsSinceBreakout),
+                             ExtensionPct(r,r.breakoutDir,px));
+        }
+     }
+   g_dash.SetRow(HUNT_DASH_RETEST_CD,cdLine,(cdLine=="" ? clrGray : HUNT_COL_WAIT));
+   g_dash.SetRow(HUNT_DASH_OBOS,
+                 CHunterDashboard::FormatObos(g_data.Rsi(0),g_settings.obosUpper,
+                                              g_settings.obosLower,g_settings.obosPeriod));
+   UpdateChecklistRows(act,nowBrk);
+  }
+
+//+------------------------------------------------------------------+
+//| Jurnal trade tertutup → MQL5\Files\HUNT_perf_<Symbol>.csv (kolom:  |
+//| waktu;simbol;sesi;arah;R;pnl). R dihitung dari risiko plan asli —    |
+//| riwayat akun tidak menyimpan SL posisi yang sudah closed.             |
+//+------------------------------------------------------------------+
+void JournalClosedTrade(const int session,const ENUM_HUNT_DIR dir,const double entry,
+                        const double sl,const double lots,const double pnl)
+  {
+   if(pnl==0.0 || g_perfFile=="")
+      return;
+   double rm=0.0;
+   double dist=MathAbs(entry-sl);
+   double ts=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
+   double tv=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_VALUE);
+   if(ts>0.0 && tv>0.0 && lots>0.0 && dist>0.0)
+     {
+      double risk=lots*(dist/ts)*tv;
+      if(risk>0.0)
+         rm=pnl/risk;
+     }
+   int h=FileOpen(g_perfFile,FILE_CSV|FILE_READ|FILE_WRITE,';');
+   if(h==INVALID_HANDLE)
+     {
+      PrintFormat("%s | perf: jurnal tidak dapat dibuka (err %d)",HUNT_NAME,GetLastError());
+      return;
+     }
+   FileSeek(h,0,SEEK_END);
+   FileWrite(h,TimeToString(TimeCurrent(),TIME_DATE|TIME_MINUTES),_Symbol,
+             CSessionManager::SessionCode(session),
+             (dir==HUNT_DIR_BUY ? "BUY" : "SELL"),
+             DoubleToString(rm,2),DoubleToString(pnl,2));
+   FileClose(h);
+   UpdatePerformanceSection();
+  }
+
+//+------------------------------------------------------------------+
+//| Section Performa: hitung dari account history (magic+symbol) utk     |
+//| jumlah/win-rate/PnL; avg R + 3 trade terakhir dari jurnal internal.  |
+//| Refresh: init, awal hari, dan tiap posisi ditutup (BUKAN per tick).   |
+//+------------------------------------------------------------------+
+void UpdatePerformanceSection(void)
+  {
+   if(!g_dash.IsActive())
+      return;
+   datetime from=TimeCurrent()-(datetime)g_settings.perfLookbackDays*86400;
+   int    trades=0,wins=0;
+   double pnlSum=0.0;
+   if(HistorySelect(from,TimeCurrent()+60))
+     {
+      int n=HistoryDealsTotal();
+      for(int i=0;i<n;i++)
+        {
+         ulong dt=HistoryDealGetTicket(i);
+         if(dt==0)
+            continue;
+         if(HistoryDealGetInteger(dt,DEAL_MAGIC)!=(long)g_settings.magic)
+            continue;
+         if(HistoryDealGetString(dt,DEAL_SYMBOL)!=_Symbol)
+            continue;
+         ENUM_DEAL_ENTRY en=(ENUM_DEAL_ENTRY)HistoryDealGetInteger(dt,DEAL_ENTRY);
+         if(en!=DEAL_ENTRY_OUT && en!=DEAL_ENTRY_OUT_BY)
+            continue;
+         double p=HistoryDealGetDouble(dt,DEAL_PROFIT)+HistoryDealGetDouble(dt,DEAL_SWAP)
+                  +HistoryDealGetDouble(dt,DEAL_COMMISSION);
+         trades++;
+         pnlSum+=p;
+         if(p>0.0)
+            wins++;
+        }
+     }
+   //--- R + 3 trade terakhir dari jurnal (file kecil; scan sekuensial)
+   double rSum=0.0;
+   int    rN=0,cnt=0;
+   string jT[3],jL[3];
+   double jR[3];
+   int    h=FileOpen(g_perfFile,FILE_CSV|FILE_READ,';');
+   if(h!=INVALID_HANDLE)
+     {
+      while(!FileIsEnding(h))
+        {
+         string dtime=FileReadString(h);
+         if(dtime=="")
+            break;
+         string sym=FileReadString(h);
+         if(sym=="" || sym!=_Symbol)
+            break;
+         string sessC=FileReadString(h);
+         string dirlab=FileReadString(h);
+         string rtxt=FileReadString(h);
+         string ptxt=FileReadString(h);
+         datetime tt=StringToTime(dtime);
+         if(tt<from || tt<=0)
+            continue;
+         double rr=StringToDouble(rtxt);
+         double pp=StringToDouble(ptxt);
+         rSum+=rr;
+         rN++;
+         int slot=cnt%3;
+         jT[slot]=TimeToString(tt,TIME_DATE|TIME_MINUTES);
+         jL[slot]=StringFormat("%s | %s | %+.2fR (%+.2f)",sessC,dirlab,rr,pp);
+         jR[slot]=rr;
+         cnt++;
+        }
+      FileClose(h);
+     }
+   g_dash.SetRow(HUNT_DASH_PERF_SUMMARY,
+                 StringFormat("Perf %dd: %d trade | win %s | P/L %+.2f%s",
+                              g_settings.perfLookbackDays,trades,
+                              (trades>0 ? StringFormat("%.0f%%",wins*100.0/trades) : "--"),
+                              pnlSum,
+                              (rN>0 ? StringFormat(" | avgR %+.2f",rSum/rN) : " | avgR n/a")),
+                 (trades==0 ? clrGray : (pnlSum>=0.0 ? clrLimeGreen : clrIndianRed)));
+   int rows[3];
+   rows[0]=HUNT_DASH_PERF_T3;
+   rows[1]=HUNT_DASH_PERF_T2;
+   rows[2]=HUNT_DASH_PERF_T1;
+   for(int q=0;q<3;q++)
+     {
+      if(q>=cnt)
+        {
+         g_dash.SetRow(rows[q],"—",clrGray);
+         continue;
+        }
+      int slot=(cnt-q-1)%3;
+      g_dash.SetRow(rows[q],"  "+jL[slot],
+                    (jR[slot]>=0.0 ? HUNT_COL_BULL : HUNT_COL_BEAR));
+     }
   }
 
 //+------------------------------------------------------------------+
@@ -526,47 +885,55 @@ void PipelineOnNewBar()
         }
       g_visual.RenderPivots(g_data,g_sessions.GetDayStartUtc());
       g_visual.RenderNews(g_news,nowBrk);
+      UpdatePerformanceSection();
      }
    g_sessions.Update(g_data,nowBrk);
    g_smc.Update(g_data);
+   //--- HTF CHoCH (bias reversal): batalkan setup searah bias lama. Posisi
+   //--- terbuka TIDAK disentuh (SL/TP/trailing lanjut — sesuai spesifikasi).
+   SChochEvent cev;
+   if(g_smc.TakeHtfChoch(cev))
+     {
+      g_chochTime=cev.time;
+      g_chochFrom=cev.fromDir;
+      g_chochTo=cev.toDir;
+      PrintFormat("%s | HTF CHoCH: %s -> %s @ %s (bar %s)",HUNT_NAME,
+                  (cev.fromDir==HUNT_DIR_BUY ? "Bullish" : "Bearish"),
+                  (cev.toDir==HUNT_DIR_BUY ? "Bullish" : "Bearish"),
+                  DoubleToString(cev.price,g_data.Digits()),
+                  TimeToString(cev.time,TIME_DATE|TIME_MINUTES));
+      g_visual.RenderHtfChoch(cev.time,cev.price,cev.toDir);
+      g_visual.Finish();
+      for(int sc=0;sc<HUNT_SESSION_COUNT;sc++)
+        {
+         int st=(int)g_state[sc];
+         if(st!=HUNT_STATE_BREAKOUT_CONFIRMED && st!=HUNT_STATE_WAIT_RETEST &&
+            st!=HUNT_STATE_READY_ENTRY)
+            continue;
+         ENUM_HUNT_DIR setupDir=(g_plan[sc].dir!=HUNT_DIR_NONE ? g_plan[sc].dir
+                                 : g_lastBo[sc].dir);
+         if(setupDir!=cev.fromDir)
+            continue;                        // setup tidak searah bias lama
+         if(g_plan[sc].pendingTicket!=0)
+            g_exec.CancelOrder(g_plan[sc].pendingTicket,"HTF CHoCH reversal");
+         g_plan[sc].Reset();
+         g_lastBo[sc].time=0;
+         g_sessions.SetOrStatus(sc,ORB_STATUS_RANGING);
+         g_orb.Reset(sc);
+         if(g_sessions.IsSessionLive(sc,nowBrk))
+            AdvanceState(sc,(g_sessions.IsRangeForming(sc,nowBrk)
+                             ? HUNT_STATE_RANGE_FORMING : HUNT_STATE_WAIT_BREAKOUT));
+         else
+            AdvanceState(sc,HUNT_STATE_IDLE);
+         PrintFormat("%s | %s: setup dibatalkan (CHoCH HTF berlawanan)",HUNT_NAME,
+                     CSessionManager::SessionName(sc));
+        }
+      UpdateBarDashboard(nowBrk);            // badge AMD + baris bias segera
+     }
    for(int s=0;s<HUNT_SESSION_COUNT;s++)
       ProcessSession(s,nowBrk);
    RenderAllStaticLayers(nowBrk);
-   //--- dash per-bar (ringkas; data berat sudah di-cache modul)
-   if(g_dash.IsActive())
-     {
-      SOpenRange ra,rl,rn;
-      g_sessions.GetRange(HUNT_SESSION_ASIA,ra);
-      g_sessions.GetRange(HUNT_SESSION_LONDON,rl);
-      g_sessions.GetRange(HUNT_SESSION_NY,rn);
-      int act=g_sessions.ActiveSession(nowBrk);
-      string sess="Session: none";
-      if(act>=0)
-        {
-         int toEnd=g_sessions.SecondsToSessionEnd(act,nowBrk);
-         sess=StringFormat("Session: %s | %.0f mnt lagi",CSessionManager::SessionName(act),
-                           MathMax(0,toEnd)/60.0);
-        }
-      string cdLine="";
-      if(act>=0 && g_state[act]==HUNT_STATE_WAIT_RETEST)
-        {
-         SOpenRange r;
-         if(g_sessions.GetRange(act,r))
-           {
-            double px=(r.breakoutDir==HUNT_DIR_BUY ? g_data.Bid() : g_data.Ask());
-            cdLine=StringFormat("Retest: %d bar sisa | ext %.0f%%",
-                                MathMax(0,g_settings.retestMaxBars-r.barsSinceBreakout),
-                                ExtensionPct(r,r.breakoutDir,px));
-           }
-        }
-      g_dash.UpdateOnBar(sess,
-                         CHunterDashboard::FormatRangeLine("Asia",ra,g_data.PipSize(),g_data.Digits()),
-                         CHunterDashboard::FormatRangeLine("London",rl,g_data.PipSize(),g_data.Digits()),
-                         CHunterDashboard::FormatRangeLine("NY",rn,g_data.PipSize(),g_data.Digits()),
-                         "HTF bias ("+EnumToString(g_settings.htf)+"): "+g_smc.HtfBiasText(),
-                         "State: "+GetStateLabel(act),(act>=0 ? (int)g_state[act] : 0),
-                         (act>=0 ? BuildSignalLine(act) : "Signal: --"),cdLine);
-     }
+   UpdateBarDashboard(nowBrk);
   }
 
 //+------------------------------------------------------------------+
@@ -783,10 +1150,14 @@ void ProcessSession(const int s,const datetime nowBrk)
 
       case HUNT_STATE_MANAGING:
         {
+         //--- snapshot risiko plan (Manage() me-reset plan saat POS_CLOSED)
+         double jEntry=g_plan[s].entry,jSl=g_plan[s].sl,jLots=g_plan[s].lots;
+         ENUM_HUNT_DIR jDir=g_plan[s].dir;
          int evt=g_exec.Manage(g_data,g_plan[s]);
          if((evt & HUNT_EVT_POS_CLOSED)!=0)
            {
-            CollectRealizedPnl(s);
+            double pnlJ=CollectRealizedPnl(s);
+            JournalClosedTrade(s,jDir,jEntry,jSl,jLots,pnlJ);
             AdvanceState(s,HUNT_STATE_WAIT_BREAKOUT);
            }
         }
@@ -822,7 +1193,9 @@ void RealtimeTick()
       int sess;
       if(!g_exec.PositionSnapshot(tk,vol,px,sl,tp,pl,dir,sess))
         {
-         CollectRealizedPnl(s);
+         double pnlX=CollectRealizedPnl(s);
+         JournalClosedTrade(s,g_plan[s].dir,g_plan[s].entry,g_plan[s].sl,
+                            g_plan[s].lots,pnlX);
          g_plan[s].Reset();
          AdvanceState(s,HUNT_STATE_WAIT_BREAKOUT);
          continue;
@@ -869,7 +1242,7 @@ void RealtimeTick()
            }
         }
      }
-   //--- dash per-tick
+   //--- dash per-tick (kritis: posisi, OB/OS, news, checklist)
    if(g_dash.IsActive())
      {
       ulong tk;
@@ -877,7 +1250,8 @@ void RealtimeTick()
       ENUM_HUNT_DIR dir;
       int sess;
       string posLine="Position: none",pendLine="Pending: none";
-      if(g_exec.PositionSnapshot(tk,vol,px,sl,tp,pl,dir,sess))
+      bool havePos=g_exec.PositionSnapshot(tk,vol,px,sl,tp,pl,dir,sess);
+      if(havePos)
         {
          double pctBal=(AccountInfoDouble(ACCOUNT_BALANCE)>0.0 ?
                         pl/AccountInfoDouble(ACCOUNT_BALANCE)*100.0 : 0.0);
@@ -886,18 +1260,25 @@ void RealtimeTick()
                               DoubleToString(px,g_data.Digits()),DoubleToString(sl,g_data.Digits()),
                               DoubleToString(tp,g_data.Digits()),pl,pctBal);
         }
-      for(int s=0;s<HUNT_SESSION_COUNT;s++)
-         if(g_plan[s].pendingTicket!=0)
+      for(int sp=0;sp<HUNT_SESSION_COUNT;sp++)
+         if(g_plan[sp].pendingTicket!=0)
            {
             pendLine=StringFormat("Pending: %s @ %s | exp %d bar",
-                                  CSessionManager::SessionName(s),
-                                  DoubleToString(g_plan[s].entry,g_data.Digits()),
-                                  g_exec.PendingBarsLeft(g_plan[s],g_data));
+                                  CSessionManager::SessionName(sp),
+                                  DoubleToString(g_plan[sp].entry,g_data.Digits()),
+                                  g_exec.PendingBarsLeft(g_plan[sp],g_data));
             break;
            }
+      g_dash.SetRow(HUNT_DASH_POSITION,posLine,
+                    (havePos ? (dir==HUNT_DIR_BUY ? HUNT_COL_BULL : HUNT_COL_BEAR) : clrGray));
+      g_dash.SetRow(HUNT_DASH_PENDING,pendLine,
+                    (pendLine=="Pending: none" ? clrGray : clrDeepSkyBlue));
       string obos=CHunterDashboard::FormatObos(g_data.Rsi(0),g_settings.obosUpper,
                                                g_settings.obosLower,g_settings.obosPeriod);
-      SNewsStatus ns=g_news.Status(nowBrk);
+      g_dash.SetRow(HUNT_DASH_OBOS,obos,
+                    (StringFind(obos,"Overbought")>=0 ||
+                     StringFind(obos,"Oversold")>=0 ? clrOrange : HUNT_COL_TEXT));
+      SNewsStatus ns=g_news.Status(TimeCurrent());
       string newsLine="News: OFF";
       if(g_settings.newsEnabled)
         {
@@ -908,16 +1289,22 @@ void RealtimeTick()
          else if(ns.blockedNow)
             newsLine="News: BLOCK — "+ns.blockedEvent;
          else if(ns.nextEventUtc>0)
-            newsLine=StringFormat("News: ok | event dlm %dm",(int)((ns.nextEventUtc-nowBrk)/60));
+            newsLine=StringFormat("News: ok | event dlm %dm",
+                                  (int)((ns.nextEventUtc-TimeCurrent())/60));
          else
             newsLine="News: ok (tanpa event)";
         }
+      g_dash.SetRow(HUNT_DASH_NEWS_STATE,newsLine,
+                    (StringFind(newsLine,"BLOCK")>=0 ? clrRed :
+                     (StringFind(newsLine,"STALE")>=0 ||
+                      StringFind(newsLine,"NO DATA")>=0 ? clrOrange : clrGray)));
       string today=StringFormat("Today: %d/%d trades | P/L %+.2f (%.1f%% vs -%.1f%%)",
                                 g_risk.TradesToday(),g_risk.MaxTrades(),g_risk.DailyPnl(),
                                 g_risk.DailyPnlPct(),g_risk.MaxDailyLossPct());
       if(g_risk.IsHalted())
          today+=" HALTED";
-      g_dash.UpdateOnTick(posLine,pendLine,obos,newsLine,today);
+      g_dash.SetRow(HUNT_DASH_TODAY,today,(g_risk.IsHalted() ? clrOrangeRed : HUNT_COL_TEXT));
+      UpdateChecklistRows(g_sessions.ActiveSession(TimeCurrent()),TimeCurrent());
      }
   }
 
@@ -980,7 +1367,9 @@ void OnTimer()
       g_exec.CloseSessionPositions(s,nPos,nPend);
       if(nPos>0 || nPend>0)
         {
-         CollectRealizedPnl(s);
+         double pnlFc=CollectRealizedPnl(s);
+         JournalClosedTrade(s,g_plan[s].dir,g_plan[s].entry,g_plan[s].sl,
+                            g_plan[s].lots,pnlFc);
          string msg=StringFormat("%s | FORCE-CLOSE %s: %d posisi ditutup, %d pending dihapus",
                                 HUNT_NAME,CSessionManager::SessionName(s),nPos,nPend);
          Print(msg);
@@ -989,6 +1378,9 @@ void OnTimer()
       g_plan[s].Reset();
       AdvanceState(s,HUNT_STATE_FORCE_CLOSED);
      }
+   //--- alert CHoCH kedaluwarsa: hilang tanpa menunggu bar baru
+   if(g_chochTime>0 && (nowBrk-g_chochTime)>g_settings.chochAlertMin*60)
+      g_dash.SetRow(HUNT_DASH_CHOCH,"--",clrGray);
    g_visual.CleanupExpired(nowBrk);
    g_visual.Finish();
   }
@@ -1023,7 +1415,9 @@ int OnInit()
    if(!g_exec.Init(g_settings))
       return(INIT_FAILED);
    g_visual.Init(g_settings);
+   g_perfFile="HUNT_perf_"+_Symbol+".csv";
    g_dash.BuildLayout(g_settings);
+   UpdatePerformanceSection();
    if(!g_news.Init(g_settings))
       PrintFormat("%s | NewsFilter init gagal — TANPA filter news (fail-safe)",HUNT_NAME);
    if(g_settings.newsEnabled && !MQLInfoInteger(MQL_TESTER))
