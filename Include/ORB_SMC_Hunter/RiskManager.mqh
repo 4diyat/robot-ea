@@ -137,6 +137,18 @@ public:
          plan.note="lot hasil sizing tidak valid";
          return(false);
         }
+      //--- Guard kontrak besar (kripto/indeks dgn VolumeMin >> kebutuhan):
+      //--- normalisasi TIDAK boleh menggelembungkan risiko >150% budget.
+      double tsz=data.TickSize();
+      if(tsz>0.0)
+        {
+         double lossPerLot=MathAbs(plan.entry-plan.sl)/tsz*data.TickValue();
+         if(lossPerLot>0.0 && lots*lossPerLot>moneyRisk*1.5)
+           {
+            plan.note="min lot broker >> budget risiko (naikkan balance atau perlebar SL)";
+            return(false);
+           }
+        }
       plan.lots=lots;
       plan.note="";
       return(true);

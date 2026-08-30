@@ -131,7 +131,41 @@ private:
    /** Jarak minimum SL/TP (stops level broker) dlm units harga. */
    double              MinStopDistance(void) const
      {
-      return((double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL)*m_cfg.point);
+      long stops =SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL);
+      long freeze=SymbolInfoInteger(_Symbol,SYMBOL_TRADE_FREEZE_LEVEL);
+      return((double)MathMax(stops,freeze)*m_cfg.point);
+     }
+   /** rc khas 'market tutup/disabled' (gap maintenance kripto): jangan
+       retry & jangan spam log — pemanggil cukup note + coba lagi nanti. */
+   static bool         IsClosedishRc(const uint rc)
+     {
+      return(rc==TRADE_RETCODE_MARKET_CLOSED || rc==TRADE_RETCODE_PRICE_OFF ||
+             rc==TRADE_RETCODE_TRADE_DISABLED);
+     }
+   /** Tipe waktu pending sesuai mode simbol: FX umumnya GTC; sebagian
+       broker kripto/indeks MENOLAK GTC (hanya DAY/SPECIFIED) → error 10022
+       'Invalid expiration'. Pilih otomatis dari SYMBOL_EXPIRATION_MODE. */
+   void                ResolvePendingTime(ENUM_ORDER_TYPE_TIME &t,datetime &exp) const
+     {
+      t=ORDER_TIME_GTC;
+      exp=0;
+      long flags=SymbolInfoInteger(_Symbol,SYMBOL_EXPIRATION_MODE);
+      if((flags&SYMBOL_EXPIRATION_GTC)!=0)
+         return;                                   // mode normal: GTC
+      int hrs=m_cfg.pendingExpireHours;
+      if(hrs<1)
+         hrs=24;
+      if((flags&SYMBOL_EXPIRATION_SPECIFIED)!=0)
+        {
+         int maxd=(int)SymbolInfoInteger(_Symbol,SYMBOL_EXPIRATION_MAX);
+         if(maxd>0 && hrs>maxd*24)
+            hrs=maxd*24;
+         t=ORDER_TIME_SPECIFIED;
+         exp=TimeTradeServer()+(datetime)(hrs*3600);
+         return;
+        }
+      if((flags&SYMBOL_EXPIRATION_DAY)!=0)
+         t=ORDER_TIME_DAY;
      }
 
    /** Bulatkan ke grid tick size (aman utk simbol tick≠10^-digits). */
@@ -259,13 +293,16 @@ public:
          return(false);
         }
       ulong ticket=0;
+      ENUM_ORDER_TYPE_TIME ptt=ORDER_TIME_GTC;
+      datetime             pexp=0;
+      ResolvePendingTime(ptt,pexp);
       for(int attempt=0;attempt<=m_cfg.orderRetries;attempt++)
         {
          bool ok=(plan.dir==HUNT_DIR_BUY)
                  ? m_trade.BuyLimit(plan.lots,plan.entry,_Symbol,plan.sl,plan.tp2,
-                                    ORDER_TIME_GTC,0,MakeComment(plan.session))
+                                    ptt,pexp,MakeComment(plan.session))
                  : m_trade.SellLimit(plan.lots,plan.entry,_Symbol,plan.sl,plan.tp2,
-                                     ORDER_TIME_GTC,0,MakeComment(plan.session));
+                                     ptt,pexp,MakeComment(plan.session));
          uint rc=m_trade.ResultRetcode();
          if(ok && IsOkRetcode(rc))
            {
@@ -306,6 +343,8 @@ public:
             return(true);
            }
          uint rc=m_trade.ResultRetcode();
+         if(IsClosedishRc(rc))
+            break;                     // market tutup → jangan bakar retry
          if(rc==TRADE_RETCODE_ORDER_CHANGED || rc==TRADE_RETCODE_DONE)
            {
             Untag(ticket);            // order sudah tereksekusi/terhapus sendiri
@@ -314,7 +353,8 @@ public:
          if(attempt<m_cfg.orderRetries)
             Sleep(m_cfg.orderRetryDelayMs);
         }
-      LogResult("OrderDelete FAIL");
+      if(!IsClosedishRc(m_trade.ResultRetcode()))
+         LogResult("OrderDelete FAIL");
       return(false);
      }
 
@@ -330,12 +370,14 @@ public:
             Untag(ticket);
             return(true);
            }
-         LogResult("close");
+         if(!IsClosedishRc(m_trade.ResultRetcode()))
+            LogResult("close");
          return(false);
         }
       if(m_trade.PositionClosePartial(ticket,volume) && IsOkRetcode(m_trade.ResultRetcode()))
          return(true);
-      LogResult("partial");
+      if(!IsClosedishRc(m_trade.ResultRetcode()))
+         LogResult("partial");
       return(false);
      }
 
@@ -476,10 +518,11 @@ public:
    //| Force-close per sesi: hanya posisi + pending dgn tag sesi tsb.     |
    //| [out] nPos/nPend utk log & Alert. Return true bila dijalankan.      |
    //+---------------------------------------------------------------+
-   bool              CloseSessionPositions(const int session,int &nPos,int &nPend)
+   bool              CloseSessionPositions(const int session,int &nPos,int &nPend,int &nFail)
      {
       nPos=0;
       nPend=0;
+      nFail=0;
       for(int i=PositionsTotal()-1;i>=0;i--)
         {
          ulong tk=PositionGetTicket(i);
@@ -502,7 +545,29 @@ public:
             if(CancelOrder(tk,"force-close sesi"))
                nPend++;
         }
-      return(nPos>0 || nPend>0);
+      //--- sisa yang masih hidup di server (gagal tutup: market closed /
+      //--- requote habis retry) → pemanggil wajib retry sebelum lanjut state.
+      for(int i=PositionsTotal()-1;i>=0;i--)
+        {
+         ulong tk=PositionGetTicket(i);
+         if(tk==0 || PositionGetInteger(POSITION_MAGIC)!=(long)m_cfg.magic ||
+            PositionGetString(POSITION_SYMBOL)!=_Symbol)
+            continue;
+         int s2;
+         if(SessionOfTicket(tk,s2,PositionGetString(POSITION_COMMENT)) && s2==session)
+            nFail++;
+        }
+      for(int i=OrdersTotal()-1;i>=0;i--)
+        {
+         ulong tk=OrderGetTicket(i);
+         if(tk==0 || OrderGetInteger(ORDER_MAGIC)!=(long)m_cfg.magic ||
+            OrderGetString(ORDER_SYMBOL)!=_Symbol)
+            continue;
+         int s2;
+         if(SessionOfTicket(tk,s2,OrderGetString(ORDER_COMMENT)) && s2==session)
+            nFail++;
+        }
+      return(nPos>0 || nPend>0 || nFail>0);
      }
 
    /** Sisa bar sebelum expiry pending (anchor per-plan, berbasis bar). */

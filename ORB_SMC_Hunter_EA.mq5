@@ -87,6 +87,7 @@ input double              InpMaxSpreadPips   = 0.0;             // Maks spread e
 input int                 InpMaxSlippagePoints = 30;            // Deviation maks (points)
 input int                 InpOrderRetries    = 3;               // Retry order saat error server
 input int                 InpOrderRetryDelayMs = 500;           // Jeda antar retry (ms)
+input int                 InpPendingExpireHours  = 24;            // Expire pending (jam) bila simbol tolak GTC
 
 input group "=== Overbought/Oversold (info dashboard) ==="
 input int                 InpOBOSPeriod      = 14;              // Periode RSI
@@ -151,6 +152,8 @@ CHunterDashboard     g_dash;
 
 ENUM_HUNT_STATE      g_state[HUNT_SESSION_COUNT];    // state machine PER SESI
 SSignalPlan          g_plan[HUNT_SESSION_COUNT];     // plan aktif per sesi
+bool                 g_fcResidue[HUNT_SESSION_COUNT];    // force-close tertahan (market closed)
+datetime             g_fcResidueLog[HUNT_SESSION_COUNT]; // throttle log retry
 SBreakout            g_lastBo[HUNT_SESSION_COUNT];   // info utk dashboard
 SSMCContext          g_lastCtx[HUNT_SESSION_COUNT];  // info utk dashboard
 datetime               g_chochTime=0;                 // CHoCH HTF terbaru
@@ -231,6 +234,7 @@ bool SnapshotSettings(SHunterSettings &s)
    s.maxSlippagePoints    =InpMaxSlippagePoints;
    s.orderRetries         =InpOrderRetries;
    s.orderRetryDelayMs    =InpOrderRetryDelayMs;
+   s.pendingExpireHours   =InpPendingExpireHours;
    s.obosPeriod           =InpOBOSPeriod;
    s.obosUpper            =InpOBOSUpperLevel;
    s.obosLower            =InpOBOSLowerLevel;
@@ -288,6 +292,8 @@ bool SnapshotSettings(SHunterSettings &s)
       err="InpNewsRefreshHours harus 1..72";
    else if(s.orderRetries<0 || s.orderRetries>10)
       err="InpOrderRetries harus 0..10";
+   else if(s.pendingExpireHours<1 || s.pendingExpireHours>336)
+      err="InpPendingExpireHours harus 1..336";
    else if(s.minScore<0 || s.minScore>100)
       err="InpMinConfluenceScore harus 0..100";
    else if(s.dashFontSize<6 || s.dashFontSize>12)
@@ -1373,10 +1379,21 @@ void OnTimer()
       if(g_state[s]==HUNT_STATE_IDLE || g_state[s]==HUNT_STATE_RANGE_FORMING ||
          g_state[s]==HUNT_STATE_WAIT_BREAKOUT || g_state[s]==HUNT_STATE_FORCE_CLOSED)
          continue;
-      if(!g_sessions.InForceCloseWindow(s,nowBrk))
+      if(!g_sessions.InForceCloseWindow(s,nowBrk) && !g_fcResidue[s])
          continue;
-      int nPos=0,nPend=0;
-      g_exec.CloseSessionPositions(s,nPos,nPend);
+      int nPos=0,nPend=0,nFail=0;
+      g_exec.CloseSessionPositions(s,nPos,nPend,nFail);
+      if(nFail>0)                                        // sisa belum tertutup
+        {
+         g_fcResidue[s]=true;
+         if(nowBrk-g_fcResidueLog[s]>=30)
+           {
+            g_fcResidueLog[s]=nowBrk;
+            PrintFormat("%s | force-close %s: %d order tertahan (market closed/disabled) — retry tiap timer",
+                        HUNT_NAME,CSessionManager::SessionName(s),nFail);
+           }
+         continue;
+        }
       if(nPos>0 || nPend>0)
         {
          double pnlFc=CollectRealizedPnl(s);
@@ -1387,6 +1404,7 @@ void OnTimer()
          Print(msg);
          Alert(msg);
         }
+      g_fcResidue[s]=false;
       g_plan[s].Reset();
       AdvanceState(s,HUNT_STATE_FORCE_CLOSED);
      }

@@ -67,6 +67,7 @@ struct SHunterSettings
    int             maxSlippagePoints;
    int             orderRetries;
    int             orderRetryDelayMs;
+   int             pendingExpireHours;     // utk simbol penolak GTC (kripto)
    //--- RSI OB/OS (info dashboard)
    int             obosPeriod;
    double          obosUpper;
@@ -139,6 +140,7 @@ void SettingsDefaults(SHunterSettings &s)
    s.maxSlippagePoints     = 30;
    s.orderRetries          = 3;
    s.orderRetryDelayMs     = 500;
+   s.pendingExpireHours    = 24;
    s.obosPeriod            = 14;
    s.obosUpper             = 70.0;
    s.obosLower             = 30.0;
