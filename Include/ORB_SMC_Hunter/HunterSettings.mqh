@@ -18,10 +18,10 @@ struct SHunterSettings
   {
    //--- identitas
    long            magic;
-   //--- sesi (jam sudah ternormalisasi ke UTC oleh EA saat snapshot)
+   //--- sesi (jam sudah ternormalisasi ke WAKTU BROKER oleh EA saat snapshot)
    bool            enableSession[HUNT_SESSION_COUNT];
-   int             startHourUtc[HUNT_SESSION_COUNT];
-   int             endHourUtc[HUNT_SESSION_COUNT];
+   int             startHourBrk[HUNT_SESSION_COUNT];
+   int             endHourBrk[HUNT_SESSION_COUNT];
    int             gmtOffset;            // broker - UTC (jam)
    //--- ORB
    int             rangeMinutes;
@@ -36,14 +36,20 @@ struct SHunterSettings
    double          maxExtensionPct;      // % dari OR sebelum retest = invalid
    double          liqTolPips;           // klaster equal highs/lows
    bool            useFvgAsZone;         // FVG boleh jadi zona retest
+   double          slAtrMult;            // buffer SL melampaui struktur (×ATR)
    double          obDisplacementAtr;    // displacement OB minimal (× ATR)
    int             atrPeriod;
    ENUM_TIMEFRAMES htf;                  // timeframe bias struktur
    double          pipSize;              // dihitung dari digits (multi-pair)
    double          point;
    int             digits;
+   //--- Entry mode
+   ENUM_ENTRY_MODE entryMode;
    //--- Confluence
    int             minScore;             // ambang skor utk lolos validator
+   //--- News (tambahan praktis)
+   int             newsTzShiftMin;       // koreksi jam feed news (menit)
+   string          newsUrlBase;          // default https://sslecal2.investing.com
    //--- Risk
    double          riskPercent;
    ENUM_HUNT_RISK_BASE riskBase;
@@ -102,12 +108,14 @@ void SettingsDefaults(SHunterSettings &s)
    s.maxExtensionPct       = 50.0;
    s.liqTolPips            = 2.0;
    s.useFvgAsZone          = true;
+   s.slAtrMult             = 0.2;
    s.obDisplacementAtr     = 1.0;
    s.atrPeriod             = 14;
    s.htf                   = PERIOD_H4;
    s.pipSize               = 0.0001;
    s.point                 = 0.00001;
    s.digits                = 5;
+   s.entryMode             = ENTRY_EXECUTION;
    s.minScore              = 60;
    s.riskPercent           = 0.5;
    s.riskBase              = HUNT_RISK_BASE_BALANCE;
@@ -133,6 +141,8 @@ void SettingsDefaults(SHunterSettings &s)
    s.newsAfterMin          = 30;
    s.newsFetchTimeoutMs    = 8000;
    s.newsCacheMaxAgeHours  = 48;
+   s.newsTzShiftMin        = 0;
+   s.newsUrlBase           = "https://sslecal2.investing.com";
    s.showOB                = true;
    s.showFvg               = true;
    s.showStructure         = true;
@@ -147,8 +157,8 @@ void SettingsDefaults(SHunterSettings &s)
    for(int i=0;i<HUNT_SESSION_COUNT;i++)
      {
       s.enableSession[i]   = true;
-      s.startHourUtc[i]    = 0;
-      s.endHourUtc[i]      = 0;
+      s.startHourBrk[i]    = 0;
+      s.endHourBrk[i]      = 0;
      }
   }
 

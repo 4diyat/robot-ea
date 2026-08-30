@@ -1,0 +1,82 @@
+; ORB_SMC_Hunter v0.90 — preset DEFAULT (demo/live)
+; Semua sesi aktif, EntryMode=PENDING_ORDER(1), news ON, visual lengkap.
+; Catatan: InpGMTOffset=2 asumsi broker UTC+2 (sesuaikan!). Jam sesi = waktu BROKER.
+; enum: InpTimeBase 0=broker 1=UTC | InpRiskBase 0=balance 1=equity
+;       InpEntryMode 0=Execution 1=PendingOrder | InpDashboardCorner 0..3 (ENUM_BASE_CORNER)
+
+;--- Session
+InpEnableAsia=true
+InpAsiaStart=2
+InpAsiaEnd=8
+InpEnableLondon=true
+InpLondonStart=14
+InpLondonEnd=22
+InpEnableNY=true
+InpNYStart=19
+InpNYEnd=3
+InpTimeBase=0
+InpGMTOffset=2
+;--- ORB
+InpRangeMinutes=30
+InpMinRangePips=0.0
+InpBreakoutBufferPips=0.0
+InpRequireBodyClose=true
+;--- SMC
+InpSwingLookback=3
+InpRequireLiquiditySweep=true
+InpRequireFVGRetest=true
+InpRetestMaxBars=10
+InpMaxExtensionBeforeRetest=50.0
+InpLiqTolerancePips=2.0
+InpUseFVGAsZone=true
+InpOBDisplacementAtr=1.0
+InpSLBufferAtrMult=0.2
+InpATRPeriod=14
+InpHTFTimeframe=16388
+;--- Confluence
+InpMinConfluenceScore=60
+;--- Entry
+InpEntryMode=1
+;--- Risk
+InpRiskPercent=0.5
+InpRiskBase=0
+InpMinRR=2.0
+InpTP1RR=1.0
+InpPartialClosePct=50.0
+InpTrailAfterTP1=true
+InpMaxTradesPerDay=3
+InpMaxDailyLossPercent=3.0
+InpForceCloseMinutesBeforeEnd=30
+InpMaxSpreadPips=0.0
+InpMaxSlippagePoints=30
+InpOrderRetries=3
+InpOrderRetryDelayMs=500
+;--- OB/OS (dashboard)
+InpOBOSPeriod=14
+InpOBOSUpperLevel=70.0
+InpOBOSLowerLevel=30.0
+;--- News
+InpEnableNewsFilter=true
+InpNewsRefreshHours=6
+InpIncludeMediumImpact=true
+InpNewsCurrencyOverride=
+InpNewsBufferBeforeMin=30
+InpNewsBufferAfterMin=30
+InpNewsFetchTimeoutMs=8000
+InpNewsCacheMaxAgeHours=48
+InpNewsTzShiftMin=0
+InpNewsUrlBase=https://sslecal2.investing.com
+;--- Visual
+InpShowOB=true
+InpShowFVG=true
+InpShowStructure=true
+InpShowSweep=true
+InpShowEntryArrows=true
+InpShowPivot=true
+InpShowVolumeProfile=true
+InpShowNewsMarkers=true
+;--- General
+InpMagicNumber=20260830
+InpShowDashboard=true
+InpDashboardCorner=0
+InpDashboardFontSize=9

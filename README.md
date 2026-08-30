@@ -158,6 +158,42 @@ Folder `docs/` berisi mock-up tampilan chart (replika warna/format asli, bukan s
 - `chart-preview-bearish.png` — skenario bearish NY + SellLimit + news medium
 - `dashboard-preview.png` — close-up panel dashboard 4 section
 - `entry-modes-preview.png` — perbandingan Pending Order vs Execution
+## 10. ORB_SMC_Hunter — build modular penuh (v0.90)
+
+Build produksi `ORB_SMC_Hunter_EA.mq5` + 12 modul di `Include/ORB_SMC_Hunter/`
+(fresh build; NextGen dibiarkan utuh sbg referensi). Per- sesi Opening Range
+disimpan **terpisah** (Asia/London/NY) dengan state machine per sesi, konfluensi
+OB/FVG/sweep/struktur/HTF, force-close per sesi via ledger tag sesi
+(comment order `HUNT:<code>:<dir>:<planId>` — sumber kebenaran = server comment,
+bukan file state), news filter investing.com (WebRequest, cache, fail-safe),
+render chart penuh ber-prefix `HUNT_*`, dan dashboard 4 seksi non-flicker.
+
+| File | Isi |
+|---|---|
+| `ORB_SMC_Hunter_EA.mq5` | Entry point + state machine + pipeline per bar |
+| `HunterDefines.mqh` | enum, struct, warna, prefix objek |
+| `HunterSettings.mqh` | input + snapshot (auto-detect pip, UTC→broker) |
+| `DataService.mqh` | cache bar closed anti-repaint, ATR/RSI handle |
+| `SessionManager.mqh` | jendela sesi + OR per sesi (persisten s/d rollover) |
+| `ORBDetector.mqh` | breakout: body-close + buffer + filter wick-only |
+| `SMCEngine.mqh` | swing/structure, OB, FVG, sweep pool, HTF bias |
+| `ConfluenceValidator.mqh` | gate keras G1–G7 + skor + re-check validasi |
+| `RiskManager.mqh` | lot %risk, SL struktural+ATR buffer, TP1/TP2, limit harian |
+| `TradeExecutor.mqh` | CTrade retry, tag/ledger sesi, close-by-session, expiry pending per plan |
+| `NewsFilter.mqh` | fetch+parse kalender, cache, veto entry (posisi tak tersentuh) |
+| `VisualRenderer.mqh` | ledger objek per kategori, cleanup prefix-scoped |
+| `Dashboard.mqh` | seksi Session/Status/Signal/News, countdown detik |
+| `presets/ORB_SMC_Hunter_{Backtest,Default,Execution}.set` | preset ready-use |
+
+**Wajib untuk news filter**: `Tools → Options → Expert Advisors → Allow WebRequest`
+tambahkan `https://sslecal2.investing.com`. Tanpa allowlist EA tetap jalan
+(news veto nonaktif, dashboard menampilkan status no-data/stale).
+
+**Status**: implementasi selesai; belum dikompilasi MetaEditor & belum
+diuji-di-chart dari lingkungan dev ini — lakukan compile (target 0 warning)
++ visual smoke test + backtest sebelum live. Known trade-offs (10 butir)
+terdokumentasi di header `ORB_SMC_Hunter_EA.mq5` dan seksi 11 arsitektur.
+
 
 ---
 

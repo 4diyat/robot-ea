@@ -7,7 +7,7 @@
 //|    Semua config mengalir lewat SHunterSettings (snapshot).      |
 //|  - Semua struct di sini adalah POD + Reset(); tanpa logika       |
 //|    trading.                                                      |
-//|  - Prefix objek chart `HUNT_*` (bukan `ORBSMC_*`) agar tidak     |
+//|  - Ruang waktu internal EA = broker (TimeCurrent); input jam     |
 //|    bentrok dengan EA milik user lain di chart yang sama.         |
 //+------------------------------------------------------------------+
 #ifndef ORB_SMC_HUNTER_DEFINES_MQH
@@ -28,6 +28,26 @@
 #define HUNT_PREFIX_VP        "HUNT_VP_"     // histogram volume profile
 #define HUNT_PREFIX_NEWS      "HUNT_NEWS_"   // vline + shading window news
 #define HUNT_PREFIX_DASH      "HUNT_DASH_"   // panel dashboard
+#define HUNT_OBJ_FILTER       "HUNT_"        // filter prefix utk sweep cleanup
+#define HUNT_PREFIX_BG        "HUNT_DASH_BG"   // background panel (1 objek)
+
+//=== Palet warna (konsisten state↔objek↔dashboard) ====================
+#define HUNT_COL_ASIA         clrDodgerBlue
+#define HUNT_COL_LONDON       clrOrange
+#define HUNT_COL_NY           clrMediumOrchid
+#define HUNT_COL_BULL         clrSeaGreen
+#define HUNT_COL_BEAR         clrIndianRed
+#define HUNT_COL_READY        clrLime
+#define HUNT_COL_WAIT         clrGold
+#define HUNT_COL_NEWS_HIGH    clrRed
+#define HUNT_COL_NEWS_MED     clrOrangeRed
+#define HUNT_COL_TEXT         clrGainsboro
+#define HUNT_COL_DASH_BG      C'16,22,34'
+#define HUNT_COL_DASH_BORDER  C'70,88,118'
+
+#define HUNT_CODE_ASIA        "ASI"
+#define HUNT_CODE_LONDON      "LON"
+#define HUNT_CODE_NY          "NY"
 
 //=== Batas kapasitas (hindari array tak terbatas) ====================
 #define HUNT_SESSION_COUNT    3              // Asia, London, NY
@@ -216,23 +236,23 @@ struct SLedgerEntry
 
 //=== Struktur data bersama =============================================
 
-//--- Opening Range satu sesi (tersimpan TERPISAH per sesi) -----------
+//--- Opening Range satu sesi (waktu dlm RUANG WAKTU BROKER/TimeCurrent) --
 struct SOpenRange
   {
-   // --- identitas & waktu (selalu UTC internal)
+   //--- identitas & waktu
    ENUM_HUNT_SESSION session;
-   datetime          startUtc;        // awal sesi
-   datetime          endUtc;          // akhir sesi (batas force-close)
-   datetime          rangeEndUtc;     // awal + InpRangeMinutes
-   // --- nilai range
+   datetime          sessionStart;    // awal sesi (broker)
+   datetime          sessionEnd;      // akhir sesi (batas force-close)
+   datetime          rangeEnd;        // sessionStart + InpRangeMinutes
+   //--- nilai range
    double            high;
    double            low;
    int               bars;            // bar closed selama jendela OR
-   // --- status
+   //--- status
    bool              formed;          // jendela OR selesai
    bool              sizeOk;          // lolos filter InpMinRangePips
    ENUM_ORB_STATUS   status;
-   datetime          breakoutTimeUtc;
+   datetime          breakoutTime;
    double            breakoutPrice;
    ENUM_HUNT_DIR     breakoutDir;
    int               barsSinceBreakout; // utk expiry/invalidasi berbasis bar
@@ -240,11 +260,11 @@ struct SOpenRange
    void              Reset(void)
      {
       session=(ENUM_HUNT_SESSION)HUNT_SESSION_NONE;
-      startUtc=0; endUtc=0; rangeEndUtc=0;
+      sessionStart=0; sessionEnd=0; rangeEnd=0;
       high=0.0; low=0.0; bars=0;
       formed=false; sizeOk=false;
       status=ORB_STATUS_NONE;
-      breakoutTimeUtc=0; breakoutPrice=0.0;
+      breakoutTime=0; breakoutPrice=0.0;
       breakoutDir=HUNT_DIR_NONE; barsSinceBreakout=0;
      }
   };
@@ -323,8 +343,11 @@ struct SSMCContext
    double            zoneTop;
    double            zoneBottom;
    ulong             zoneId;
+   bool              zoneFresh;        // zona dibuat ≤ N bar lalu
+   bool              rangeBigAtr;      // OR > 2×ATR (kualitas volatilitas)
+   double            extensionPct;     // % range yang sudah ditempuh saat ini
    double            rsi;              // info dashboard; bukan gate kecuali diminta
-   bool              rsiExtreme;       // overbought/oversold saat breakout
+   bool              rsiExtreme;       // overbought/oversold searah breakout
   };
 
 //--- Rencana trade lengkap (dibuat validator, dieksekusi TradeExecutor) |
@@ -345,10 +368,13 @@ struct SSignalPlan
    // --- asal-usul & tracking
    datetime          breakoutTime;
    ulong             zoneId;
+   double            zoneTopSnap;       // snapshot tepi zona utk retest/SL
+   double            zoneBottomSnap;
    int               score;           // confluence 0..100
    datetime          validUntilBarTime; // expiry berbasis bar (retest/pendng)
    ulong             pendingTicket;   // 0 bila belum/market mode
    bool              submitted;
+   bool              partialDone;     // TP1 partial sudah dieksekusi
    string            note;
    void              Reset(void)
      {
@@ -357,7 +383,9 @@ struct SSignalPlan
       entry=0.0; sl=0.0; tp1=0.0; tp2=0.0;
       slDistPips=0.0; rrFinal=0.0; lots=0.0;
       breakoutTime=0; zoneId=0; score=0;
-      validUntilBarTime=0; pendingTicket=0; submitted=false; note="";
+      zoneTopSnap=0.0; zoneBottomSnap=0.0;
+      validUntilBarTime=0; pendingTicket=0; submitted=false;
+      partialDone=false; note="";
      }
   };
 
@@ -372,15 +400,19 @@ struct STicketTag
   };
 
 //--- Event news hasil parsing kalender --------------------------------
+//--- timeUtc  : waktu event hasil feed (tz sesuai permintaan API, ± shift input)
+//--- timeBroker/blockFrom/blockTo : dikonversi ke ruang waktu broker utk
+//---     perbandingan TimeCurrent() & render vline (konsisten dgn sesi).
 struct SNewsEvent
   {
    datetime          timeUtc;
+   datetime          timeBroker;
    string            currency;
    string            title;
    ENUM_HUNT_NEWS_IMPACT impact;
    bool              relevant;        // lolos filter currency+impact
-   datetime          blockFromUtc;    // time - InpNewsBufferBeforeMin
-   datetime          blockToUtc;      // time + InpNewsBufferAfterMin
+   datetime          blockFrom;       // timeBroker - InpNewsBufferBeforeMin
+   datetime          blockTo;         // timeBroker + InpNewsBufferAfterMin
   };
 
 //--- Status news utk dashboard & gate entry ----------------------------

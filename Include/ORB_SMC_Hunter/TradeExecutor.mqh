@@ -1,18 +1,19 @@
 //+------------------------------------------------------------------+
 //|                                                TradeExecutor.mqh |
-//| Satu-satunya modul yang menyentuh pasar. Semua order lewat CTrade |
-//| (MqlTradeRequest dibangun internal CTrade — tidak manual).       |
+//| Satu-satunya modul yang menyentuh pasar. Semua order lewat CTrade  |
+//| (MqlTradeRequest dibangun internal CTrade).                        |
 //|                                                                  |
-//|  - Magic number dari settings; komentar order "HUNT|<SESSION>"    |
-//|    + ledger internal ticket→session (untuk force-close per sesi); |
-//|  - retry InpOrderRetries× dgn delay utk error server transient    |
-//|    (requote/busy/off quotes/conn — IsRetryableRetcode);           |
-//|  - retcode dipetakan ke pesan via trade.ResultRetcodeDescription; |
-//|  - ENTRY_EXECUTION     : Buy/Sell market setelah reaksi retest;   |
-//|  - ENTRY_PENDING_ORDER : Buy/Sell Limit di tepi zona, SL/TP        |
-//|    dipasang bersamaan (dihitung dari level limit), expiry          |
-//|    BERBASIS BAR (hitung bar closed sejak pasang, bukan jam);       |
-//|  - CloseSessionPositions(): hanya posisi/pending milik SESI tsb.   |
+//|  - Magic + comment "HUNT|<KODE-SESI>" + ledger internal ticket→    |
+//|    session: sumber utama atribusi sesi (fallback: parse comment);   |
+//|  - Retry InpOrderRetries× utk retcode transient (requote, price    |
+//|    changed/off, timeout, connection, order changed), Sleep antar    |
+//|    retry; retcode lain → fail cepat dengan pesan deskriptif;        |
+//|  - ENTRY_EXECUTION: market Buy/Sell + SL/TP atomik; entry di-update |
+//|    ke harga fill;                                                     |
+//|  - ENTRY_PENDING_ORDER: limit di tepi zona + SL/TP sejak pasang     |
+//|    (dihitung dari LEVEL LIMIT, bukan harga market); expiry          |
+//|    berbasis BAR (iBarShift), bukan jam;                              |
+//|  - CloseSessionPositions: hanya posisi+pending dgn tag sesi tsb.    |
 //+------------------------------------------------------------------+
 #ifndef ORB_SMC_HUNTER_TRADEEXECUTOR_MQH
 #define ORB_SMC_HUNTER_TRADEEXECUTOR_MQH
@@ -22,6 +23,8 @@
 #include <Trade\OrderInfo.mqh>
 #include "DataService.mqh"
 
+#define HUNT_TAG_MAX 64
+
 class CTradeExecutor
   {
 private:
@@ -29,80 +32,507 @@ private:
    CPositionInfo       m_pinfo;
    COrderInfo          m_oinfo;
    SHunterSettings     m_cfg;
-   //--- ledger tag posisi/order → sesi asal (ticket → tag)
-   STicketTag          m_tags[64];
+   STicketTag          m_tags[HUNT_TAG_MAX];
    int                 m_tagCount;
-   //--- tracking expiry pending berbasis bar
-   datetime            m_pendingPlacedBarTime;   // bar time saat order dipasang
 
-   /** Retry-able retcode? (TRADE_RETCODE_REQUOTE, *_BUSY? via
-       ResultRetcode: requote/off-quotes/conn/limit — see impl notes). */
-   bool                IsRetryableRetcode(const uint code) const;
-   /** Jeda retry (Sleep) + revalidasi harga sebelum percobaan ulang. */
-   void                RetryWait(void) const;
-   /** Log satu baris hasil order: op, retcode description, harga. */
-   void                LogResult(const string op) const;
-
-   /** Simpan/refresh tag utk satu ticket. */
-   void                Tag(const ulong ticket,const int session,
-                           const ENUM_HUNT_DIR dir,const ulong planId);
-   /** Ambil tag utk ticket; false bila bukan milik EA. */
-   bool                TagOf(const ulong ticket,STicketTag &out) const;
-   /** Buang tag (posisi tertutup / order dihapus). */
-   void                Untag(const ulong ticket);
-   /** Comment "HUNT|<SESSIONNAME>" utk order. */
-   string              MakeComment(const int session) const;
-   /** Jarak minimum SL/TP dari harga (stops level broker) dlm price units. */
-   double              MinStopDistance(void) const;
+   bool                IsRetryableRetcode(const uint code) const
+     {
+      switch(code)
+        {
+         case TRADE_RETCODE_REQUOTE:
+         case TRADE_RETCODE_PRICE_CHANGED:
+         case TRADE_RETCODE_PRICE_OFF:
+         case TRADE_RETCODE_ORDER_CHANGED:
+         case TRADE_RETCODE_TIMEOUT:
+         case TRADE_RETCODE_CONNECTION:
+            return(true);
+        }
+      return(false);
+     }
+   bool                IsOkRetcode(const uint code) const
+     {
+      return(code==TRADE_RETCODE_DONE || code==TRADE_RETCODE_DONE_PARTIAL ||
+             code==TRADE_RETCODE_PLACED);
+     }
+   void                LogResult(const string op) const
+     {
+      uint rc=m_trade.ResultRetcode();
+      PrintFormat("%s | EXEC %s: ret=%u %s",HUNT_NAME,op,rc,
+                  m_trade.ResultRetcodeDescription());
+     }
+   void                Tag(const ulong ticket,const int session,const ENUM_HUNT_DIR dir,
+                           const ulong planId)
+     {
+      for(int i=0;i<m_tagCount;i++)
+        {
+         if(m_tags[i].ticket==ticket)
+           {
+            m_tags[i].session=(ENUM_HUNT_SESSION)session;
+            m_tags[i].dir=dir;
+            m_tags[i].planId=planId;
+            m_tags[i].openTime=TimeCurrent();
+            return;
+           }
+        }
+      if(m_tagCount<HUNT_TAG_MAX)
+        {
+         m_tags[m_tagCount].ticket=ticket;
+         m_tags[m_tagCount].session=(ENUM_HUNT_SESSION)session;
+         m_tags[m_tagCount].dir=dir;
+         m_tags[m_tagCount].planId=planId;
+         m_tags[m_tagCount].openTime=TimeCurrent();
+         m_tagCount++;
+        }
+     }
+   bool                TagOf(const ulong ticket,STicketTag &dstTag) const
+     {
+      for(int i=0;i<m_tagCount;i++)
+         if(m_tags[i].ticket==ticket)
+           {
+            dstTag=m_tags[i];
+            return(true);
+           }
+      return(false);
+     }
+   void                Untag(const ulong ticket)
+     {
+      for(int i=0;i<m_tagCount;i++)
+         if(m_tags[i].ticket==ticket)
+           {
+            for(int k=i;k<m_tagCount-1;k++)
+               m_tags[k]=m_tags[k+1];
+            m_tagCount--;
+            return;
+           }
+     }
+   string              MakeComment(const int session) const
+     {
+      string code=HUNT_CODE_ASIA;
+      if(session==HUNT_SESSION_LONDON)
+         code=HUNT_CODE_LONDON;
+      if(session==HUNT_SESSION_NY)
+         code=HUNT_CODE_NY;
+      return("HUNT|"+code);
+     }
+   /** Atribusi sesi utk ticket server: ledger dulu, fallback parse comment
+       "HUNT|XXX". Return false bila bukan milik EA. */
+   bool                SessionOfTicket(const ulong ticket,int &session,const string comment) const
+     {
+      STicketTag tg;
+      if(TagOf(ticket,tg))
+        {
+         session=(int)tg.session;
+         return(true);
+        }
+      if(StringFind(comment,"HUNT|")==0)
+        {
+         if(StringFind(comment,HUNT_CODE_ASIA)>=0)   { session=HUNT_SESSION_ASIA;   return(true); }
+         if(StringFind(comment,HUNT_CODE_LONDON)>=0) { session=HUNT_SESSION_LONDON; return(true); }
+         if(StringFind(comment,HUNT_CODE_NY)>=0)     { session=HUNT_SESSION_NY;     return(true); }
+        }
+      return(false);
+     }
+   /** Jarak minimum SL/TP (stops level broker) dlm units harga. */
+   double              MinStopDistance(void) const
+     {
+      return((double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL)*m_cfg.point);
+     }
 
 public:
-                     CTradeExecutor(void) : m_tagCount(0),
-                                            m_pendingPlacedBarTime(0) {}
+                     CTradeExecutor(void) : m_tagCount(0) {}
 
-   /** Set magic, deviation (maxSlippagePoints), type filling, comment mode. */
-   bool              Init(const SHunterSettings &cfg);
+   /** Set magic/deviation/filling/comment mode. Return true. */
+   bool              Init(const SHunterSettings &cfg)
+     {
+      m_cfg=cfg;
+      m_trade.SetExpertMagicNumber((ulong)cfg.magic);
+      m_trade.SetDeviationInPoints((ulong)(cfg.maxSlippagePoints>0 ? cfg.maxSlippagePoints : 30));
+      m_trade.SetTypeFillingBySymbol(_Symbol);
+      m_trade.LogLevel(LOG_LEVEL_ERRORS);
+      return(true);
+     }
 
-   //--- eksekusi -----------------------------------------------------------
-   /** Mode ENTRY_EXECUTION: market Buy/Sell + SL/TP atomik via
-       m_trade.Buy/Sell(volume,symbol,0,sl,tp,comment). Plan.entry diisi
-       harga fill aktual (OrderInfo), utk recompute RR display.
-       @return true terisi. */
-   bool              OpenMarket(SSignalPlan &plan,const CDataService &data);
-   /** Mode ENTRY_PENDING_ORDER: BuyLimit/SellLimit di plan.entry +
-       SL/TP dihitung dari LEVEL LIMIT. @return true terpasang. */
-   bool              PlacePending(SSignalPlan &plan);
-   /** Hapus pending order by ticket (expiry / invalidasi / force-close). */
-   bool              CancelOrder(const ulong ticket,const string why);
-   /** Tutup posisi by ticket; volume=0 → penuh. */
-   bool              ClosePosition(const ulong ticket,const double volume,const string why);
+   //+---------------------------------------------------------------+
+   //| Mode ENTRY_EXECUTION — market order + SL/TP atomik dengan retry.  |
+   //| [in] data utk harga. [in,out] plan: entry→harga fill, submitted.  |
+   //| Return true = terisi (posisi live).                                |
+   //+---------------------------------------------------------------+
+   bool              OpenMarket(SSignalPlan &plan,CDataService &data)
+     {
+      if(plan.dir!=HUNT_DIR_BUY && plan.dir!=HUNT_DIR_SELL)
+         return(false);
+      double minStop=MinStopDistance();
+      bool filled=false;
+      for(int attempt=0;attempt<=m_cfg.orderRetries;attempt++)
+        {
+         double price=(plan.dir==HUNT_DIR_BUY ? data.Ask() : data.Bid());
+         //--- jaga jarak stops dari harga eksekusi
+         if(plan.dir==HUNT_DIR_BUY && (price-plan.sl)<minStop)
+            plan.sl=data.NormalizePrice(price-minStop);
+         if(plan.dir==HUNT_DIR_SELL && (plan.sl-price)<minStop)
+            plan.sl=data.NormalizePrice(price+minStop);
+         bool ok=(plan.dir==HUNT_DIR_BUY)
+                 ? m_trade.Buy(plan.lots,_Symbol,price,plan.sl,plan.tp2,MakeComment(plan.session))
+                 : m_trade.Sell(plan.lots,_Symbol,price,plan.sl,plan.tp2,MakeComment(plan.session));
+         uint rc=m_trade.ResultRetcode();
+         if(ok && IsOkRetcode(rc))
+           {
+            filled=true;
+            break;
+           }
+         if(!IsRetryableRetcode(rc))
+           {
+            LogResult("market");
+            break;
+           }
+         if(attempt<m_cfg.orderRetries)
+           {
+            Sleep(m_cfg.orderRetryDelayMs);
+            data.RefreshQuotes();
+           }
+        }
+      if(!filled)
+        {
+         LogResult("market FAIL");
+         return(false);
+        }
+      plan.entry=m_trade.ResultPrice()>0.0 ? m_trade.ResultPrice() : plan.entry;
+      plan.submitted=true;
+      ulong posTicket=m_trade.ResultOrder();
+      if(posTicket>0)
+         Tag(posTicket,(int)plan.session,plan.dir,plan.planId);
+      LogResult("market OK");
+      return(true);
+     }
 
-   //--- manajemen & sinkronisasi -------------------------------------------
-   /** Sinkron ledger vs server + deteksi event lifecycle plan.
-       Isi flags ENUM_HUNT_EXEC_EVENT (bitwise). Expiry pending dihitung
-       dari jumlah bar closed sejak m_pendingPlacedBarTime > retestMaxBars. */
-   int               Manage(const CDataService &data,SSignalPlan &activePlan);
-   /** true bila ada posisi open milik magic EA. */
-   bool              HasOpenPosition(void) const;
-   /** true bila ada pending order milik magic EA. */
-   bool              HasPendingOrders(void) const;
-   /** Snapshot posisi milik EA (asumsi max 1; multi → yang pertama). */
-   bool              PositionSnapshot(ulong &ticket,double &vol,double &price,
-                                      double &sl,double &tp,double &pl,
-                                      ENUM_HUNT_DIR &dir,int &session) const;
+   /** Mode ENTRY_PENDING_ORDER — limit di tepi zona, SL/TP dr level limit.
+       [in] data utk bar-anchor expiry. Return true + pendingTicket terisi. */
+   bool              PlacePending(SSignalPlan &plan,CDataService &data)
+     {
+      if(plan.dir!=HUNT_DIR_BUY && plan.dir!=HUNT_DIR_SELL)
+         return(false);
+      double minStop=MinStopDistance();
+      //--- validasi jarak thd harga sekarang SEBELUM kirim
+      double mark=(plan.dir==HUNT_DIR_BUY ? data.Bid() : data.Ask());
+      if(plan.dir==HUNT_DIR_BUY && (plan.entry-mark)<minStop)
+        {
+         plan.note="limit terlalu dekat dgn harga";
+         return(false);
+        }
+      if(plan.dir==HUNT_DIR_SELL && (mark-plan.entry)<minStop)
+        {
+         plan.note="limit terlalu dekat dgn harga";
+         return(false);
+        }
+      ulong ticket=0;
+      for(int attempt=0;attempt<=m_cfg.orderRetries;attempt++)
+        {
+         bool ok=(plan.dir==HUNT_DIR_BUY)
+                 ? m_trade.BuyLimit(plan.lots,plan.entry,_Symbol,plan.sl,plan.tp2,
+                                    ORDER_TIME_GTC,0,MakeComment(plan.session))
+                 : m_trade.SellLimit(plan.lots,plan.entry,_Symbol,plan.sl,plan.tp2,
+                                     ORDER_TIME_GTC,0,MakeComment(plan.session));
+         uint rc=m_trade.ResultRetcode();
+         if(ok && IsOkRetcode(rc))
+           {
+            ticket=m_trade.ResultOrder();
+            break;
+           }
+         if(!IsRetryableRetcode(rc))
+           {
+            LogResult("pending");
+            break;
+           }
+         if(attempt<m_cfg.orderRetries)
+            Sleep(m_cfg.orderRetryDelayMs);
+        }
+      if(ticket==0)
+        {
+         LogResult("pending FAIL");
+         return(false);
+        }
+      plan.pendingTicket=ticket;
+      plan.validUntilBarTime=data.CurrentBarTime();  // anchor expiry berbasis bar
+      Tag(ticket,(int)plan.session,plan.dir,plan.planId);
+      LogResult("pending OK");
+      return(true);
+     }
 
-   /** Force-close per sesi: hanya posisi+pending dgn tag sesi == session.
-       @return true bila dijalankan; nPos/nPend utk log & Alert. */
-   bool              CloseSessionPositions(const int session,int &nPos,int &nPend);
+   /** Hapus pending order by ticket (expiry/invalidasi/force-close). */
+   bool              CancelOrder(const ulong ticket,const string why)
+     {
+      if(ticket==0)
+         return(false);
+      for(int attempt=0;attempt<=m_cfg.orderRetries;attempt++)
+        {
+         if(m_trade.OrderDelete(ticket) && IsOkRetcode(m_trade.ResultRetcode()))
+           {
+            Untag(ticket);
+            PrintFormat("%s | pending %I64u dihapus (%s)",HUNT_NAME,ticket,why);
+            return(true);
+           }
+         uint rc=m_trade.ResultRetcode();
+         if(rc==TRADE_RETCODE_ORDER_CHANGED || rc==TRADE_RETCODE_DONE)
+           {
+            Untag(ticket);            // order sudah tereksekusi/terhapus sendiri
+            return(false);
+           }
+         if(attempt<m_cfg.orderRetries)
+            Sleep(m_cfg.orderRetryDelayMs);
+        }
+      LogResult("OrderDelete FAIL");
+      return(false);
+     }
 
-   //--- query utk dashboard / validator --------------------------------------
-   /** Sisa bar sebelum expiry pending (berbasis bar closed). */
-   int               PendingBarsLeft(const CDataService &data) const;
-   /** Floating P/L total milik magic EA (currency). */
-   double            FloatingPl(void) const;
-   /** true bila plan masih punya order/posisi hidup. */
-   bool              IsPlanLive(const SSignalPlan &plan) const;
-   /** Bersihkan tag yatim (ticket tak ada lagi di server). */
-   void              ReconcileTags(void);
+   /** Tutup posisi by ticket (volume=0 → penuh). */
+   bool              ClosePosition(const ulong ticket,const double volume,const string why)
+     {
+      if(ticket==0)
+         return(false);
+      if(volume<=0.0)
+        {
+         if(m_trade.PositionClose(ticket) && IsOkRetcode(m_trade.ResultRetcode()))
+           {
+            Untag(ticket);
+            return(true);
+           }
+         LogResult("close");
+         return(false);
+        }
+      if(m_trade.PositionClosePartial(ticket,volume) && IsOkRetcode(m_trade.ResultRetcode()))
+         return(true);
+      LogResult("partial");
+      return(false);
+     }
+
+   //+---------------------------------------------------------------+
+   //| Query posisi/order milik EA.                                    |
+   //+---------------------------------------------------------------+
+   /** true bila ada posisi open milik magic+symbol. */
+   bool              HasOpenPosition(void)
+     {
+      for(int i=PositionsTotal()-1;i>=0;i--)
+        {
+         ulong tk=m_pinfo.PositionGetTicket(i);
+         if(tk==0)
+            continue;
+         if(m_pinfo.PositionMagic()==(ulong)m_cfg.magic &&
+            m_pinfo.PositionSymbol()==_Symbol)
+            return(true);
+        }
+      return(false);
+     }
+   bool              HasPendingOrders(void)
+     {
+      for(int i=OrdersTotal()-1;i>=0;i--)
+        {
+         ulong tk=m_oinfo.OrderGetTicket(i);
+         if(tk==0)
+            continue;
+         if(m_oinfo.OrderMagic()==(ulong)m_cfg.magic && m_oinfo.OrderSymbol()==_Symbol)
+            return(true);
+        }
+      return(false);
+     }
+   /** Ticket posisi utk plan (via ledger tag planId; fallback magic-first). */
+   bool              FindPlanPositionTicket(const ulong planId,ulong &ticket)
+     {
+      for(int i=PositionsTotal()-1;i>=0;i--)
+        {
+         ulong tk=m_pinfo.PositionGetTicket(i);
+         if(tk==0 || m_pinfo.PositionMagic()!=(ulong)m_cfg.magic ||
+            m_pinfo.PositionSymbol()!=_Symbol)
+            continue;
+         STicketTag tg;
+         if(TagOf(tk,tg) && tg.planId==planId)
+           {
+            ticket=tk;
+            return(true);
+           }
+        }
+      return(false);
+     }
+   /** Order pending masih ada di server? */
+   bool              OrderStillLive(const ulong ticket)
+     {
+      for(int i=OrdersTotal()-1;i>=0;i--)
+         if(m_oinfo.OrderGetTicket(i)==ticket)
+            return(true);
+      return(false);
+     }
+   //+---------------------------------------------------------------+
+   //| Sinkronisasi lifecycle plan (dipanggil utk sesi dlm MANAGING atau     |
+   //| WAIT_RETEST+pending). Return bitwise ENUM_HUNT_EXEC_EVENT:            |
+   //|  PENDING_FILLED : posisi utk plan muncul (order ticket → posisi).      |
+   //|  PENDING_EXPIRED: bar closed sejak pasang > retestMaxBars → delete.    |
+   //|  POS_CLOSED     : submitted && posisi plan hilang (TP/SL/manual).      |
+   //+---------------------------------------------------------------+
+   int               Manage(const CDataService &data,SSignalPlan &plan)
+     {
+      int evt=HUNT_EVT_NONE;
+      if(plan.pendingTicket!=0 && !plan.submitted)
+        {
+         //--- sudah terisi?
+         if(HasOpenPosition())
+           {
+            plan.submitted=true;
+            ulong tk=0;
+            if(FindPlanPositionTicket(plan.planId,tk))
+               Tag(tk,(int)plan.session,plan.dir,plan.planId);
+            plan.pendingTicket=0;
+            evt|=HUNT_EVT_PENDING_FILLED;
+           }
+         else if(OrderStillLive(plan.pendingTicket))
+           {
+            int barsPassed=0;
+            datetime tNow=data.CurrentBarTime();
+            if(plan.validUntilBarTime>0 && tNow>plan.validUntilBarTime)
+               barsPassed=(int)((tNow-plan.validUntilBarTime)/PeriodSeconds(_Period));
+            if(barsPassed>=m_cfg.retestMaxBars)
+              {
+               CancelOrder(plan.pendingTicket,"expiry bar tercapai");
+               plan.pendingTicket=0;
+               evt|=HUNT_EVT_PENDING_EXPIRED;
+              }
+           }
+         else
+           {
+            plan.pendingTicket=0;      // hilang dari server (manual/ECN)
+            evt|=HUNT_EVT_PENDING_EXPIRED;
+           }
+        }
+      if(plan.submitted && plan.pendingTicket==0)
+        {
+         ulong tk=0;
+         if(!FindPlanPositionTicket(plan.planId,tk))
+           {
+            evt|=HUNT_EVT_POS_CLOSED;
+            plan.Reset();
+           }
+        }
+      return(evt);
+     }
+
+   /** Snapshot posisi EA (max 1; multi→terlama). Session via tag/comment. */
+   bool              PositionSnapshot(ulong &ticket,double &vol,double &price,double &sl,
+                                      double &tp,double &pl,ENUM_HUNT_DIR &dir,
+                                      int &session)
+     {
+      for(int i=PositionsTotal()-1;i>=0;i--)
+        {
+         ulong tk=m_pinfo.PositionGetTicket(i);
+         if(tk==0 || m_pinfo.PositionMagic()!=(ulong)m_cfg.magic ||
+            m_pinfo.PositionSymbol()!=_Symbol)
+            continue;
+         ticket=tk;
+         vol=m_pinfo.PositionVolume();
+         price=m_pinfo.PositionPriceOpen();
+         sl=m_pinfo.PositionSL();
+         tp=m_pinfo.PositionTP();
+         pl=m_pinfo.PositionProfit();
+         dir=(m_pinfo.PositionType()==POSITION_TYPE_BUY ? HUNT_DIR_BUY : HUNT_DIR_SELL);
+         if(!SessionOfTicket(ticket,session,m_pinfo.PositionComment()))
+            session=HUNT_SESSION_NONE;
+         return(true);
+        }
+      return(false);
+     }
+
+   //+---------------------------------------------------------------+
+   //| Force-close per sesi: hanya posisi + pending dgn tag sesi tsb.     |
+   //| [out] nPos/nPend utk log & Alert. Return true bila dijalankan.      |
+   //+---------------------------------------------------------------+
+   bool              CloseSessionPositions(const int session,int &nPos,int &nPend)
+     {
+      nPos=0;
+      nPend=0;
+      for(int i=PositionsTotal()-1;i>=0;i--)
+        {
+         ulong tk=m_pinfo.PositionGetTicket(i);
+         if(tk==0 || m_pinfo.PositionMagic()!=(ulong)m_cfg.magic ||
+            m_pinfo.PositionSymbol()!=_Symbol)
+            continue;
+         int s2;
+         if(SessionOfTicket(tk,s2,m_pinfo.PositionComment()) && s2==session)
+            if(ClosePosition(tk,0.0,"force-close sesi"))
+               nPos++;
+        }
+      for(int i=OrdersTotal()-1;i>=0;i--)
+        {
+         ulong tk=m_oinfo.OrderGetTicket(i);
+         if(tk==0 || m_oinfo.OrderMagic()!=(ulong)m_cfg.magic ||
+            m_oinfo.OrderSymbol()!=_Symbol)
+            continue;
+         int s2;
+         if(SessionOfTicket(tk,s2,m_oinfo.OrderComment()) && s2==session)
+            if(CancelOrder(tk,"force-close sesi"))
+               nPend++;
+        }
+      return(nPos>0 || nPend>0);
+     }
+
+   /** Sisa bar sebelum expiry pending (anchor per-plan, berbasis bar). */
+   int               PendingBarsLeft(const SSignalPlan &plan,const CDataService &data) const
+     {
+      datetime tNow=data.CurrentBarTime();
+      int passed=0;
+      if(plan.validUntilBarTime>0 && tNow>plan.validUntilBarTime)
+         passed=(int)((tNow-plan.validUntilBarTime)/PeriodSeconds(_Period));
+      return(MathMax(0,m_cfg.retestMaxBars-passed));
+     }
+   /** Floating P/L total milik magic+symbol (currency). */
+   double            FloatingPl(void)
+     {
+      double s=0.0;
+      for(int i=PositionsTotal()-1;i>=0;i--)
+        {
+         ulong tk=m_pinfo.PositionGetTicket(i);
+         if(tk==0 || m_pinfo.PositionMagic()!=(ulong)m_cfg.magic ||
+            m_pinfo.PositionSymbol()!=_Symbol)
+            continue;
+         s+=m_pinfo.PositionProfit()+m_pinfo.PositionSwap();
+        }
+      return(s);
+     }
+   bool              IsPlanLive(const SSignalPlan &plan) const
+     {
+      return(plan.pendingTicket!=0 || plan.submitted);
+     }
+   /** Buang tag utk ticket yang sudah tak ada di server. */
+   void              ReconcileTags(void)
+     {
+      for(int i=m_tagCount-1;i>=0;i--)
+        {
+         ulong tk=m_tags[i].ticket;
+         bool live=false;
+         for(int p=PositionsTotal()-1;p>=0 && !live;p--)
+            if(m_pinfo.PositionGetTicket(p)==tk)
+               live=true;
+         for(int o=OrdersTotal()-1;o>=0 && !live;o--)
+            if(m_oinfo.OrderGetTicket(o)==tk)
+               live=true;
+         if(!live)
+            Untag(tk);
+        }
+     }
+   /** Update harga SL utk plan yang sudah terisi (breakeven/trailing). */
+   bool              ModifySl(const ulong ticket,const double newSl,const double newTp)
+     {
+      for(int attempt=0;attempt<=m_cfg.orderRetries;attempt++)
+        {
+         if(m_trade.PositionModify(ticket,newSl,newTp) && IsOkRetcode(m_trade.ResultRetcode()))
+            return(true);
+         uint rc=m_trade.ResultRetcode();
+         if(rc==TRADE_RETCODE_NO_CHANGES)
+            return(true);
+         if(!IsRetryableRetcode(rc))
+            break;
+         if(attempt<m_cfg.orderRetries)
+            Sleep(m_cfg.orderRetryDelayMs);
+        }
+      LogResult("modify FAIL");
+      return(false);
+     }
   };
 
 #endif // ORB_SMC_HUNTER_TRADEEXECUTOR_MQH

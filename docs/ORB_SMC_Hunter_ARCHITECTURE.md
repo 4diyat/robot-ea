@@ -62,3 +62,37 @@ Skor lunak: sweep presisi 25 · BOS-post-sweep 20 · zona fresh 15 · range>2×A
 - OnTick ringan; pipeline heavy di gerbang `NewBarArrived`; countdown & refresh terjadwal di `OnTimer(1)`.
 - Tanpa `#property strict` (deprecated di MQL5 → menimbulkan *warning*; target: nol warning).
 - Volume Profile: approximasi **per-bar** (bukan tick-level) — murah & deterministik, konsistensi backtest/forward terjamin.
+
+
+---
+
+## 11. Implementasi vs skeleton (perbedaan final)
+
+- `CLockSession` dihapus; force-close dieksekusi via
+  `CSessionManager::InForceCloseWindow()` + `CTradeExecutor::CloseSessionPositions()`
+  dari OnTimer sweep 1-detik (bukan event terpisah).
+- `CORBDetector::Assess(session, orIn, data, nowBrk, SBreakout &res)` — keluaran
+  lewat out-param + return bool (bukan struct by-value); ditambahkan
+  `RefreshStatus(session, orIn, data)` utk re-arm status saat price balik ke range.
+- `CSessionManager::SetOrStatus(session, status)` ditambahkan (helper re-arm
+  RANGING; clear breakoutTime/dir, barsSince di-reset oleh ORBDetector.Reset).
+- `SSignalPlan` memakai `validUntilBarTime` sbg jangkar expiry pending PER PLAN
+  (bukan field global bar-patch di executor) + flag `partialDone`.
+- `SSMCContext` membawa `zoneFresh/rangeBigAtr/extensionPct` + salinan zone utk
+  re-check; `zoneTopSnap/zoneBottomSnap` di plan dipakai gate retest snap-safe.
+- Konfluensi = gate keras G1–G7 (hard reject) + skor 7 komponen (≥60 default);
+  re-check saat entry memakai `StillValid()` (freshness ≤3 bar, belum broken/used).
+- Risk: `BuildPlan(plan,data,structLevel)`; SL = ekstrem struktur −/+ buffer
+  (min 1×ATR); TP2 fallback 2R bila swing target tak ada (no pool-target API).
+- News: parsing toleran dari HTML investing.com (bukan JSON) — kolom waktu/hari
+  dideteksi struktural, impact difilter SERVER-side via URL `importance=`,
+  heuristik utk medium; cache di-`TimeTradeServer`-space; veto hanya utk entry.
+- Eksekusi: retcode transien (REQUOTE/PRICE_CHANGED/PRICE_OFF/TIMEOUT/CONNECTION/
+  ORDER_CHANGED) → retry ≤ InpOrderRetries dg refresh quote; re-pricing pending
+  HANYA mode Execution sebelum market entry.
+- Renderer memakai ledger `{category,name,expire}` — cleanup per kategori +
+  kedaluwarsa (OB 6 jam, marker entry 48 jam), `Finish()` = 1 ChartRedraw;
+  tanpa `ObjectsDeleteAll`.
+- Dashboard: 1 rectangle label bg + label per baris (OBJ_RECTANGLE_LABEL tidak
+  punya alpha — bg solid gelap sebagai workaround transparansi), SetRow
+  diff-only (hanya write saat teks/ warna berubah), countdown detik by OnTimer.
