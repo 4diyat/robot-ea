@@ -23,7 +23,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "0.90"
+#property version     "1.96"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -480,11 +480,11 @@ void InvalidateSetup(const int s,const string why)
 double CollectRealizedPnl(const int s)
   {
    if(s<0 || s>=HUNT_SESSION_COUNT)
-      return;
+      return(0.0);
    datetime t0=(g_lastPnlScan[s]>0 ? g_lastPnlScan[s]+1 : g_sessions.CurrentDayUtc());
    datetime t1=TimeCurrent()+60;
    if(!HistorySelect(t0,t1))
-      return;
+      return(0.0);
    double sum=0.0;
    int total=HistoryDealsTotal();
    for(int i=0;i<total;i++)

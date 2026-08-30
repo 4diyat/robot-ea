@@ -129,8 +129,8 @@ private:
       //--- 1) FX klasik 6-huruf "XXXXYY": quote = cur domestik; base fiat → +2
       if(StringLen(up)==6 && IsAlphaStr(up))
         {
-         string b=StringMid(up,0,3);
-         string q=StringMid(up,3,3);
+         string b=StringSubstr(up,0,3);
+         string q=StringSubstr(up,3,3);
          if(IsCur(q))
            {
             m_cur1=q;

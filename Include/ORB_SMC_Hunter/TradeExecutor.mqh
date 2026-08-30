@@ -144,27 +144,25 @@ private:
      }
    /** Tipe waktu pending sesuai mode simbol: FX umumnya GTC; sebagian
        broker kripto/indeks MENOLAK GTC (hanya DAY/SPECIFIED) → error 10022
-       'Invalid expiration'. Pilih otomatis dari SYMBOL_EXPIRATION_MODE. */
+       'Invalid expiration'. Pilih otomatis dr properti ekspirasi. */
    void                ResolvePendingTime(ENUM_ORDER_TYPE_TIME &t,datetime &exp) const
      {
       t=ORDER_TIME_GTC;
       exp=0;
-      long flags=SymbolInfoInteger(_Symbol,SYMBOL_EXPIRATION_MODE);
-      if((flags&SYMBOL_EXPIRATION_GTC)!=0)
+      //--- properti resmi SYMBOL_EXPIRATION_{GTC,DAY,SPECIFIED} = 1 bila
+      //--- mode didukung simbol (bukan bitmask — jangan AND dgn MODE)
+      if(SymbolInfoInteger(_Symbol,SYMBOL_EXPIRATION_GTC)!=0)
          return;                                   // mode normal: GTC
       int hrs=m_cfg.pendingExpireHours;
       if(hrs<1)
          hrs=24;
-      if((flags&SYMBOL_EXPIRATION_SPECIFIED)!=0)
+      if(SymbolInfoInteger(_Symbol,SYMBOL_EXPIRATION_SPECIFIED)!=0)
         {
-         int maxd=(int)SymbolInfoInteger(_Symbol,SYMBOL_EXPIRATION_MAX);
-         if(maxd>0 && hrs>maxd*24)
-            hrs=maxd*24;
          t=ORDER_TIME_SPECIFIED;
          exp=TimeTradeServer()+(datetime)(hrs*3600);
          return;
         }
-      if((flags&SYMBOL_EXPIRATION_DAY)!=0)
+      if(SymbolInfoInteger(_Symbol,SYMBOL_EXPIRATION_DAY)!=0)
          t=ORDER_TIME_DAY;
      }
 
@@ -617,6 +615,7 @@ public:
    /** Update harga SL utk plan yang sudah terisi (breakeven/trailing). */
    bool              ModifySl(const ulong ticket,const double newSl,const double newTp)
      {
+      double sl=newSl;                               // salinan lokal (param const)
       //--- clamp multi-simbol: SL harus ≥ stops-level dari harga pasar DAN
       //--- hanya boleh maju (perketat) — jangan pernah longgarkan SL.
       {
@@ -639,19 +638,19 @@ public:
           double mkt=(pt==POSITION_TYPE_BUY ? SymbolInfoDouble(_Symbol,SYMBOL_BID)
                                             : SymbolInfoDouble(_Symbol,SYMBOL_ASK));
           double lim=(pt==POSITION_TYPE_BUY ? mkt-minStop : mkt+minStop);
-          double cand=Grid(newSl);
+          double cand=Grid(sl);
           if(pt==POSITION_TYPE_BUY ? cand>lim : cand<lim)
              cand=Grid(lim);
           bool forward=(oldSl==0.0 ? true
-                   :(pt==POSITION_TYPE_BUY ? cand>oldSl : cand<oldSl));
+                        :(pt==POSITION_TYPE_BUY ? cand>oldSl : cand<oldSl));
           if(!forward)
              return(true);                        // tak ada perbaikan → no-op
-          newSl=cand;
+          sl=cand;
          }
       }
       for(int attempt=0;attempt<=m_cfg.orderRetries;attempt++)
         {
-         if(m_trade.PositionModify(ticket,newSl,newTp) && IsOkRetcode(m_trade.ResultRetcode()))
+         if(m_trade.PositionModify(ticket,sl,newTp) && IsOkRetcode(m_trade.ResultRetcode()))
             return(true);
          uint rc=m_trade.ResultRetcode();
          if(rc==TRADE_RETCODE_NO_CHANGES)
