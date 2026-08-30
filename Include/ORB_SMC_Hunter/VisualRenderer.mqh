@@ -343,12 +343,17 @@ public:
             continue;
          color c=(bull ? HUNT_COL_BULL : HUNT_COL_BEAR);
          string nm=(fvg ? HUNT_PREFIX_FVG : HUNT_PREFIX_OB)+IntegerToString((long)z.id);
-         DrawZoneBox(nm,z.createdTime,z.top,z.extendTime>z.createdTime ? z.extendTime : nowBrk,
-                     z.bottom,c,fvg,HUNT_LED_OB,0);
-         if(z.state==HUNT_ZONE_MITIGATED)
-            DrawTextLabel(nm+"~mit",z.extendTime,z.top,
-                          (fvg ? "FVG filled?" : "OB mit."),clrGray,7,ANCHOR_LEFT_LOWER,
-                          (fvg ? HUNT_LED_FVG : HUNT_LED_OB),0);
+         bool   mit=(z.state==HUNT_ZONE_MITIGATED);
+         datetime t2e=(z.extendTime>z.createdTime ? z.extendTime : nowBrk);
+         //--- mitigated: kotak PUDAR, berhenti di titik fill (tidak menjuntai
+         //--- ke kanan), auto-hapus 12 bar — chart tidak lagi menumpuk zona mati
+         datetime zexp=(mit ? nowBrk+12*PeriodSeconds(_Period) : 0);
+         DrawZoneBox(nm,z.createdTime,z.top,t2e,z.bottom,
+                     (mit ? clrDimGray : c),fvg,HUNT_LED_OB,zexp);
+         if(mit)
+            DrawTextLabel(nm+"~mit",t2e,z.top,
+                          (fvg ? "FVG filled" : "OB mit."),clrDimGray,7,ANCHOR_LEFT_LOWER,
+                          (fvg ? HUNT_LED_FVG : HUNT_LED_OB),zexp);
         }
      }
 

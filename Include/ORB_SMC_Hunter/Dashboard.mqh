@@ -43,10 +43,17 @@ private:
    int                 m_rowY[HUNT_DASH_ROWS_TOTAL];
    color               m_led;
 
-   /** Perkiraan lebar teks px (Consolas ~0.60em/char). */
+   /** Sembunyikan/tampilkan objek (OBJ_LABEL tak boleh berteks kosong —
+       MQL5 menolak '' dan menampilkan default 'Label'; solusinya:
+       OBJ_NO_PERIODS). */
+   static void         SetShown(const string nm,const bool on)
+     {
+      ObjectSetInteger(0,nm,OBJPROP_TIMEFRAMES,(on ? OBJ_ALL_PERIODS : OBJ_NO_PERIODS));
+     }
+   /** Perkiraan lebar teks px (Consolas ~0.62em/char + kelonggaran). */
    static int          TextPx(const string t,const int fs)
      {
-      return((int)(StringLen(t)*fs*0.60));
+      return((int)(StringLen(t)*fs*0.62));
      }
    /** Rectangle-label dekoratif (koordinasi relatif anchor panel). */
    void                Rect(const string nm,const int dx,const int dy,
@@ -83,9 +90,11 @@ private:
       ObjectSetString(0,nm,OBJPROP_FONT,font);
       ObjectSetInteger(0,nm,OBJPROP_FONTSIZE,fs);
       ObjectSetInteger(0,nm,OBJPROP_COLOR,clr);
-      ObjectSetString(0,nm,OBJPROP_TEXT,txt);
+      ObjectSetString(0,nm,OBJPROP_TEXT,(txt=="" ? " " : txt));
       ObjectSetInteger(0,nm,OBJPROP_SELECTABLE,false);
       ObjectSetInteger(0,nm,OBJPROP_HIDDEN,true);
+      if(txt=="")
+         SetShown(nm,false);
      }
    static string       StatusText(const SOpenRange &r)
      {
@@ -102,29 +111,35 @@ private:
    /** Render ulang satu baris dari cache (split 2 kolom / utuh). */
    void                RenderRow(const int i)
      {
-      ObjectSetString(0,m_rowNames[i],OBJPROP_TEXT,
-                      m_rowSplit[i] ? StringSubstr(m_rowText[i],0,StringFind(m_rowText[i],": "))
-                                    : m_rowText[i]);
-      ObjectSetInteger(0,m_rowNames[i],OBJPROP_COLOR,
-                       m_rowSplit[i] ? HUNT_COL_DASH_LABEL : m_rowColor[i]);
       if(m_rowSplit[i])
         {
          int p=StringFind(m_rowText[i],": ");
+         ObjectSetString(0,m_rowNames[i],OBJPROP_TEXT,StringSubstr(m_rowText[i],0,p));
+         ObjectSetInteger(0,m_rowNames[i],OBJPROP_COLOR,HUNT_COL_DASH_LABEL);
+         SetShown(m_rowNames[i],true);
          ObjectSetString(0,m_rowVal[i],OBJPROP_TEXT,StringSubstr(m_rowText[i],p+2));
          ObjectSetInteger(0,m_rowVal[i],OBJPROP_COLOR,m_rowColor[i]);
+         SetShown(m_rowVal[i],true);
         }
       else
-         ObjectSetString(0,m_rowVal[i],OBJPROP_TEXT,"");
+        {
+         ObjectSetString(0,m_rowNames[i],OBJPROP_TEXT,m_rowText[i]);
+         ObjectSetInteger(0,m_rowNames[i],OBJPROP_COLOR,m_rowColor[i]);
+         SetShown(m_rowNames[i],true);
+         SetShown(m_rowVal[i],false);     // jangan pernah sisakan 'Label'
+        }
      }
    /** Putuskan layak-split (value tak boleh menabrak label). */
    bool                WantSplit(const string text,const int p) const
      {
-      if(p<3 || p>22)
+      if(p<3 || p>18)
          return(false);
-      string lab=StringSubstr(text,0,p);
       string val=StringSubstr(text,p+2);
+      if(StringLen(val)>32)
+         return(false);                  // value panjang → satu kolom saja
       int fs=m_cfg.dashFontSize;
-      return(TextPx(lab,fs)+TextPx(val,fs)+44 <= HUNT_DASH_W-2*HUNT_DASH_PAD);
+      string lab=StringSubstr(text,0,p);
+      return(TextPx(lab,fs)+TextPx(val,fs)+64 <= HUNT_DASH_W-2*HUNT_DASH_PAD);
      }
    void                SetLed(const color c)
      {
@@ -150,7 +165,7 @@ public:
          return(false);
       int corner=m_cfg.dashCorner;
       int rows=HUNT_DASH_ROWS_TOTAL;
-      m_panelH=HUNT_DASH_HDRH+8+rows*HUNT_DASH_LNH+HUNT_DASH_NSEC*HUNT_DASH_BANDH+6;
+      m_panelH=HUNT_DASH_HDRH+10+rows*HUNT_DASH_LNH+HUNT_DASH_NSEC*HUNT_DASH_BANDH+6;
       m_bgX =(corner==CORNER_LEFT_UPPER||corner==CORNER_LEFT_LOWER ? 6 : -(HUNT_DASH_W+6));
       m_bgY =(corner==CORNER_LEFT_UPPER||corner==CORNER_RIGHT_UPPER
               ? HUNT_DASH_H0 : -(HUNT_DASH_H0+m_panelH));
@@ -174,7 +189,7 @@ public:
       for(g=0;g<HUNT_DASH_NSEC;g++)
          bandY[g]=-1;
       //--- layout vertikal: band di ATAS baris pertamanya
-      int y=HUNT_DASH_HDRH+8;
+      int y=HUNT_DASH_HDRH+10;
       for(i=0;i<rows;i++)
         {
          for(g=0;g<HUNT_DASH_NSEC;g++)
@@ -195,10 +210,12 @@ public:
       Rect("HUNT_DASH_LED",12,10,6,6,clrDimGray,HUNT_COL_DASH_HDR);
       //--- progress bars (track + fill), zona y = HDRH..HDRH+8
       int trkW=HUNT_DASH_W-2*10;
-      Rect("HUNT_DASH_TRKA",10,HUNT_DASH_HDRH+2,trkW,2,HUNT_COL_DASH_TRACK,clrNONE);
-      Rect("HUNT_DASH_FLA",10,HUNT_DASH_HDRH+2,0,2,HUNT_COL_DASH_ACCENT,clrNONE);
-      Rect("HUNT_DASH_TRKB",10,HUNT_DASH_HDRH+5,trkW,2,HUNT_COL_DASH_TRACK,clrNONE);
-      Rect("HUNT_DASH_FLB",10,HUNT_DASH_HDRH+5,0,2,clrOrange,clrNONE);
+      Rect("HUNT_DASH_TRKA",10,HUNT_DASH_HDRH+1,trkW,3,HUNT_COL_DASH_TRACK,clrNONE);
+      Rect("HUNT_DASH_FLA",10,HUNT_DASH_HDRH+1,1,3,HUNT_COL_DASH_ACCENT,clrNONE);
+      Rect("HUNT_DASH_TRKB",10,HUNT_DASH_HDRH+5,trkW,3,HUNT_COL_DASH_TRACK,clrNONE);
+      Rect("HUNT_DASH_FLB",10,HUNT_DASH_HDRH+5,1,3,clrOrange,clrNONE);
+      SetShown("HUNT_DASH_FLA",false);
+      SetShown("HUNT_DASH_FLB",false);
       //--- section bands
       for(g=0;g<HUNT_DASH_NSEC;g++)
          if(bandY[g]>=0)
@@ -234,7 +251,12 @@ public:
          Text(m_rowVal[i],HUNT_DASH_W-HUNT_DASH_PAD,m_rowY[i]+1,"Consolas",m_cfg.dashFontSize,
               HUNT_COL_TEXT,"",ANCHOR_RIGHT_UPPER);
         }
+      //--- row HDR dirender di header band → dua objek barisnya tak dipakai
+      SetShown(m_rowNames[HUNT_DASH_HDR],false);
+      SetShown(m_rowVal[HUNT_DASH_HDR],false);
       m_built=true;
+      for(i=1;i<rows;i++)                 // placeholder -- (bukan 'Label' nyasar)
+         SetRow(i,"--",clrDimGray);
       SetRow(HUNT_DASH_HDR,"EA v"+HUNT_VERSION,HUNT_COL_DASH_LABEL);
       ChartRedraw(0);
       return(true);
@@ -275,9 +297,16 @@ public:
       int wa=0;
       if(totalBarSec>0)
          wa=(int)((long)(totalBarSec-MathMax(0,secToBarClose))*trkW/totalBarSec);
-      ObjectSetInteger(0,"HUNT_DASH_FLA",OBJPROP_XSIZE,MathMax(0,MathMin(trkW,wa)));
-      ObjectSetInteger(0,"HUNT_DASH_FLA",OBJPROP_COLOR,
-                       (secToBarClose<=30 ? C'255,92,92' : HUNT_COL_DASH_ACCENT));
+      wa=MathMax(0,MathMin(trkW,wa));
+      if(wa<3)
+         SetShown("HUNT_DASH_FLA",false);
+      else
+        {
+         ObjectSetInteger(0,"HUNT_DASH_FLA",OBJPROP_XSIZE,wa);
+         ObjectSetInteger(0,"HUNT_DASH_FLA",OBJPROP_COLOR,
+                          (secToBarClose<=30 ? C'255,92,92' : HUNT_COL_DASH_ACCENT));
+         SetShown("HUNT_DASH_FLA",true);
+        }
       //--- progress bar B: pendekatan force-close (jendela 30 mnt terakhir)
       int wb=0;
       color cb=clrSlateGray;
@@ -296,8 +325,15 @@ public:
                wb=0;
            }
         }
-      ObjectSetInteger(0,"HUNT_DASH_FLB",OBJPROP_XSIZE,MathMin(trkW,wb));
-      ObjectSetInteger(0,"HUNT_DASH_FLB",OBJPROP_COLOR,cb);
+      wb=MathMax(0,MathMin(trkW,wb));
+      if(wb<3)
+         SetShown("HUNT_DASH_FLB",false);
+      else
+        {
+         ObjectSetInteger(0,"HUNT_DASH_FLB",OBJPROP_XSIZE,wb);
+         ObjectSetInteger(0,"HUNT_DASH_FLB",OBJPROP_COLOR,cb);
+         SetShown("HUNT_DASH_FLB",true);
+        }
      }
    //+---------------------------------------------------------------+
    //| API utama: SetRow per id baris — diff-only (skip bila identik).   |
@@ -310,19 +346,22 @@ public:
          return;
       if(row<0 || row>=HUNT_DASH_ROWS_TOTAL)
          return;
-      if(m_rowText[row]==text && m_rowColor[row]==clr)
+      string t=text;
+      if(t=="")
+         t="--";
+      if(m_rowText[row]==t && m_rowColor[row]==clr)
          return;
       if(row==HUNT_DASH_HDR)
         {
-         m_rowText[row]=text;
+         m_rowText[row]=t;
          m_rowColor[row]=clr;
-         ObjectSetString(0,"HUNT_DASH_VER",OBJPROP_TEXT,text);
+         ObjectSetString(0,"HUNT_DASH_VER",OBJPROP_TEXT,t);
          return;
         }
-      m_rowText[row]=text;
+      m_rowText[row]=t;
       m_rowColor[row]=clr;
-      int p=StringFind(text,": ");
-      m_rowSplit[row]=(p>0 && WantSplit(text,p));
+      int p=StringFind(t,": ");
+      m_rowSplit[row]=(p>0 && WantSplit(t,p));
       RenderRow(row);
       if(row==HUNT_DASH_STATE)
          SetLed(clr);
