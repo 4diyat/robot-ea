@@ -61,13 +61,10 @@ private:
       ObjectSetInteger(0,nm,OBJPROP_XSIZE,w);
       ObjectSetInteger(0,nm,OBJPROP_YSIZE,h);
       ObjectSetInteger(0,nm,OBJPROP_BGCOLOR,fill);
-      if(edge==clrNONE)
-         ObjectSetInteger(0,nm,OBJPROP_BORDER_TYPE,NONE_BORDER);
-      else
-        {
-         ObjectSetInteger(0,nm,OBJPROP_BORDER_TYPE,BORDER_FLAT);
-         ObjectSetInteger(0,nm,OBJPROP_COLOR,edge);
-        }
+      //--- 'tanpa border' diemu-lasikan: BORDER_FLAT sewarna fill
+      //--- (MQL5 tidak mengenal NONE_BORDER)
+      ObjectSetInteger(0,nm,OBJPROP_BORDER_TYPE,BORDER_FLAT);
+      ObjectSetInteger(0,nm,OBJPROP_COLOR,(edge==clrNONE ? fill : edge));
       ObjectSetInteger(0,nm,OBJPROP_BACK,false);
       ObjectSetInteger(0,nm,OBJPROP_SELECTABLE,false);
       ObjectSetInteger(0,nm,OBJPROP_HIDDEN,true);
@@ -173,11 +170,11 @@ public:
       sectTitle[4]="NEWS FILTER";
       sectTitle[5]="PERFORMANCE";
       int bandY[HUNT_DASH_NSEC];
+      int g,i;
       for(g=0;g<HUNT_DASH_NSEC;g++)
          bandY[g]=-1;
       //--- layout vertikal: band di ATAS baris pertamanya
       int y=HUNT_DASH_HDRH+8;
-      int g,i;
       for(i=0;i<rows;i++)
         {
          for(g=0;g<HUNT_DASH_NSEC;g++)

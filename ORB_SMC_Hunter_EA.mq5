@@ -23,7 +23,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.99"
+#property version     "1.00"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
