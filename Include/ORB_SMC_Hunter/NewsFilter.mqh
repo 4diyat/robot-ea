@@ -84,6 +84,26 @@ private:
         }
       return(true);
      }
+   /** Validator kecil utk resolusi simbol→currency (bukan utk parsing feed). */
+   static bool         IsAlphaStr(const string t)
+     {
+      for(int i=0;i<StringLen(t);i++)
+        {
+         uchar ch=(uchar)StringGetCharacter(t,i);
+         if(ch<'A' || ch>'Z')
+            return(false);
+        }
+      return(true);
+     }
+   static bool         IsCur(const string c)
+     {
+      return(StringFind(" EUR USD JPY GBP CHF AUD NZD CAD CNY CNH SGD HKD "," "+c+" ")>=0);
+     }
+   static bool         IsFiatCur(const string c)
+     {
+      return(StringFind(" EUR GBP JPY CHF AUD NZD CAD CNY CNH "," "+c+" ")>=0);
+     }
+
    /** Auto-detect currency target dr _Symbol (posisi 0-2 & 3-5, tahan
        suffix). Base fiat ikut; non-fiat (XAU/XAG/US500) → quote saja. */
    void                ResolveCurrency(void)
@@ -105,17 +125,49 @@ private:
             m_cur1=HUNT_ToUpper(over);
          return;
         }
-      string sym=_Symbol;
-      if(StringLen(sym)<6)
-         return;
-      string base=HUNT_ToUpper(StringSubstr(sym,0,3));
-      string quote=HUNT_ToUpper(StringSubstr(sym,3,3));
-      m_cur1=quote;
-      bool fiat=(base=="EUR"||base=="GBP"||base=="JPY"||base=="CHF"||
-                 base=="AUD"||base=="NZD"||base=="CAD"||base=="CNH"||base=="CNY");
-      if(fiat)
-         m_cur2=base;
+      string up=HUNT_ToUpper(_Symbol);
+      //--- 1) FX klasik 6-huruf "XXXXYY": quote = cur domestik; base fiat → +2
+      if(StringLen(up)==6 && IsAlphaStr(up))
+        {
+         string b=StringMid(up,0,3);
+         string q=StringMid(up,3,3);
+         if(IsCur(q))
+           {
+            m_cur1=q;
+            if(IsFiatCur(b))
+               m_cur2=b;
+            return;
+           }
+        }
+      //--- 2) kode valuta dikenal di mana pun dlm nama simbol (XAUUSD, BTCUSD,
+      //---    DE30.EUR, US500.cash tanpa kode → fallback prefiks di bawah)
+      string all[9];
+      all[0]="USD"; all[1]="EUR"; all[2]="GBP"; all[3]="JPY"; all[4]="CHF";
+      all[5]="AUD"; all[6]="NZD"; all[7]="CAD"; all[8]="CNY";
+      for(int i=0;i<9;i++)
+         if(StringFind(up,all[i])>=0)
+           {
+            m_cur1=all[i];
+            return;
+           }
+      //--- 3) prefiks pasar regional/ indeks
+      if(StringFind(up,"DE")>=0 || StringFind(up,"GER")>=0 ||
+         StringFind(up,"FRA")>=0 || StringFind(up,"EUR")>=0)
+         m_cur1="EUR";
+      else if(StringFind(up,"UK")>=0 || StringFind(up,"GB")>=0 || StringFind(up,"FTSE")>=0)
+         m_cur1="GBP";
+      else if(StringFind(up,"JP")>=0 || StringFind(up,"NIK")>=0)
+         m_cur1="JPY";
+      else if(StringFind(up,"AUS")>=0)
+         m_cur1="AUD";
+      else if(StringFind(up,"HK")>=0)
+         m_cur1="HKD";
+      else if(StringFind(up,"CA")>=0 || StringFind(up,"CAN")>=0)
+         m_cur1="CAD";
+      else
+         m_cur1="USD";                            // default aman utk US-listed/umum
      }
+
 
    /** GET feed; [out] html. Return true + HTTP 200. */
    bool                FetchCalendar(string &html)

@@ -120,6 +120,7 @@ input long                InpMagicNumber     = 20260830;        // Magic number 
 input bool                InpShowDashboard   = true;            // Tampilkan dashboard
 input ENUM_BASE_CORNER    InpDashboardCorner = CORNER_LEFT_UPPER; // Pojok panel
 input int                 InpDashboardFontSize = 9;             // Font size panel (6..12)
+input double              InpPipSizeOverride = 0.0;         // Override ukuran 1 pip (0=auto: 5/3/2 digit→10×point)
 input int                 InpPerformanceLookbackDays = 7;   // Jendela section Performa (hari)
 
 #include <ORB_SMC_Hunter\DataService.mqh>
@@ -309,10 +310,16 @@ bool SnapshotSettings(SHunterSettings &s)
    //--- 0/4 → pip=point). Override manual: sesuaikan via kode bila perlu.
    s.digits=(int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS);
    s.point=SymbolInfoDouble(_Symbol,SYMBOL_POINT);
+   s.tickSize=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
+   if(s.tickSize<=0.0)
+      s.tickSize=s.point;
    if(s.digits==5 || s.digits==3 || s.digits==2)
       s.pipSize=s.point*10.0;
    else
       s.pipSize=s.point;
+   s.pipOverride=InpPipSizeOverride;
+   if(s.pipOverride>0.0)
+      s.pipSize=s.pipOverride;                 // broker/konvensi eksotis
    //--- jam sesi → ruang BROKER ------------------------------------------------
    int inStart[HUNT_SESSION_COUNT]={InpAsiaStart,InpLondonStart,InpNYStart};
    int inEnd  [HUNT_SESSION_COUNT]={InpAsiaEnd,InpLondonEnd,InpNYEnd};
@@ -1211,8 +1218,13 @@ void RealtimeTick()
             if(part>0.0 && g_exec.ClosePosition(tk,part,"TP1 partial"))
               {
                g_plan[s].partialDone=true;
+               //--- buffer BE: maks(2 point, stops-level+1) → valid utk
+               //--- broker ber-stops-level besar (Gold/Indeks umum)
+               double beBuf=MathMax(2.0*g_settings.point,
+                                    ((double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL)
+                                     +1.0)*g_settings.point);
                double be=g_data.NormalizePrice(g_plan[s].entry+
-                           (dir==HUNT_DIR_BUY ? 2.0*g_settings.point : -2.0*g_settings.point));
+                           (dir==HUNT_DIR_BUY ? beBuf : -beBuf));
                g_exec.ModifySl(tk,be,tp);
                PrintFormat("%s | %s: TP1 partial %.2f lot, SL -> %s",HUNT_NAME,
                            CSessionManager::SessionName(s),part,

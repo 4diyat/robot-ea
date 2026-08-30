@@ -42,6 +42,7 @@ struct SHunterSettings
    double          obDisplacementAtr;    // displacement OB minimal (× ATR)
    int             atrPeriod;
    ENUM_TIMEFRAMES htf;                  // timeframe bias struktur
+   double          tickSize;           // SYMBOL_TRADE_TICK_SIZE (grid harga)
    double          pipSize;              // dihitung dari digits (multi-pair)
    double          point;
    int             digits;
@@ -91,6 +92,7 @@ struct SHunterSettings
    //--- Dashboard
    bool            showDashboard;
    int             dashCorner;           // nilai ENUM_BASE_CORNER 0..3
+   double          pipOverride;        // 0 = auto dari digits (override manual)
    int             dashFontSize;
    int             perfLookbackDays;       // jendela section Performa
   };
@@ -117,7 +119,9 @@ void SettingsDefaults(SHunterSettings &s)
    s.obDisplacementAtr     = 1.0;
    s.atrPeriod             = 14;
    s.htf                   = PERIOD_H4;
+   s.tickSize              = 0.00001;
    s.pipSize               = 0.0001;
+   s.pipOverride           = 0.0;
    s.point                 = 0.00001;
    s.digits                = 5;
    s.entryMode             = ENTRY_EXECUTION;

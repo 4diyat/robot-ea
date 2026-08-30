@@ -41,6 +41,7 @@ InpMaxDailyLossPercent=0.0
 InpForceCloseMinutesBeforeEnd=30
 InpMaxSpreadPips=0.0
 InpMaxSlippagePoints=30
+InpPipSizeOverride=0.0
 InpOrderRetries=3
 InpOrderRetryDelayMs=500
 InpOBOSPeriod=14

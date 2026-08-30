@@ -238,6 +238,11 @@ public:
    /** Normalisasi harga ke digits simbol. */
    double            NormalizePrice(double price) const
      {
+      //--- grid tick size dulu (simbol dgn tick≠10^-digits: indeks/kripto),
+      //--- lalu rapikan digit — hindari 'Invalid price' di server ketat
+      double ts=(m_cfg.tickSize>0.0 ? m_cfg.tickSize : m_cfg.point);
+      if(ts>0.0)
+         price=MathRound(price/ts)*ts;
       return(NormalizeDouble(price,m_cfg.digits));
      }
 

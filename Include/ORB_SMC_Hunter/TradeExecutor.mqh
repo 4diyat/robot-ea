@@ -134,6 +134,33 @@ private:
       return((double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL)*m_cfg.point);
      }
 
+   /** Bulatkan ke grid tick size (aman utk simbol tick≠10^-digits). */
+   double              Grid(const double price) const
+     {
+      double ts=(m_cfg.tickSize>0.0 ? m_cfg.tickSize : m_cfg.point);
+      double v=price;
+      if(ts>0.0)
+         v=MathRound(v/ts)*ts;
+      return(NormalizeDouble(v,m_cfg.digits));
+     }
+   /** Estimasi margin perlu utk lot tsb vs free margin (95% buffer).
+       False = kemungkinan besar ditolak server → jangan kirim order. */
+   bool                MarginOk(const double lots,const ENUM_ORDER_TYPE type)
+     {
+      double px=(type==ORDER_TYPE_BUY || type==ORDER_TYPE_SELL)
+                ? (type==ORDER_TYPE_BUY ? SymbolInfoDouble(_Symbol,SYMBOL_ASK)
+                                        : SymbolInfoDouble(_Symbol,SYMBOL_BID))
+                : (type==ORDER_TYPE_BUY_LIMIT || type==ORDER_TYPE_BUY_STOP
+                   ? SymbolInfoDouble(_Symbol,SYMBOL_ASK)
+                   : SymbolInfoDouble(_Symbol,SYMBOL_BID));
+      if(px<=0.0 || lots<=0.0)
+         return(true);
+      double need=0.0;
+      if(!OrderCalcMargin(type,_Symbol,lots,px,need))
+         return(true);                          // tak bisa hitung → server saja
+      return(need<=AccountInfoDouble(ACCOUNT_MARGIN_FREE)*0.95);
+     }
+
 public:
                      CTradeExecutor(void) : m_tagCount(0) {}
 
@@ -157,6 +184,11 @@ public:
      {
       if(plan.dir!=HUNT_DIR_BUY && plan.dir!=HUNT_DIR_SELL)
          return(false);
+      if(!MarginOk(plan.lots,plan.dir==HUNT_DIR_BUY ? ORDER_TYPE_BUY : ORDER_TYPE_SELL))
+        {
+         plan.note="margin tidak cukup utk lot ini";
+         return(false);
+        }
       double minStop=MinStopDistance();
       bool filled=false;
       for(int attempt=0;attempt<=m_cfg.orderRetries;attempt++)
@@ -207,6 +239,12 @@ public:
      {
       if(plan.dir!=HUNT_DIR_BUY && plan.dir!=HUNT_DIR_SELL)
          return(false);
+      if(!MarginOk(plan.lots,plan.dir==HUNT_DIR_BUY ? ORDER_TYPE_BUY_LIMIT
+                                                     : ORDER_TYPE_SELL_LIMIT))
+        {
+         plan.note="margin tidak cukup utk lot ini";
+         return(false);
+        }
       double minStop=MinStopDistance();
       //--- validasi jarak thd harga sekarang SEBELUM kirim
       double mark=(plan.dir==HUNT_DIR_BUY ? data.Bid() : data.Ask());
@@ -514,6 +552,38 @@ public:
    /** Update harga SL utk plan yang sudah terisi (breakeven/trailing). */
    bool              ModifySl(const ulong ticket,const double newSl,const double newTp)
      {
+      //--- clamp multi-simbol: SL harus ≥ stops-level dari harga pasar DAN
+      //--- hanya boleh maju (perketat) — jangan pernah longgarkan SL.
+      {
+       ENUM_POSITION_TYPE pt=POSITION_TYPE_BUY;
+       double oldSl=0.0;
+       bool found=false;
+       for(int p=PositionsTotal()-1;p>=0;p--)
+         {
+          if(PositionGetTicket(p)==ticket)
+            {
+             pt=(ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+             oldSl=PositionGetDouble(POSITION_SL);
+             found=true;
+             break;
+            }
+         }
+       if(found)
+         {
+          double minStop=MinStopDistance();
+          double mkt=(pt==POSITION_TYPE_BUY ? SymbolInfoDouble(_Symbol,SYMBOL_BID)
+                                            : SymbolInfoDouble(_Symbol,SYMBOL_ASK));
+          double lim=(pt==POSITION_TYPE_BUY ? mkt-minStop : mkt+minStop);
+          double cand=Grid(newSl);
+          if(pt==POSITION_TYPE_BUY ? cand>lim : cand<lim)
+             cand=Grid(lim);
+          bool forward=(oldSl==0.0 ? true
+                   :(pt==POSITION_TYPE_BUY ? cand>oldSl : cand<oldSl));
+          if(!forward)
+             return(true);                        // tak ada perbaikan → no-op
+          newSl=cand;
+         }
+      }
       for(int attempt=0;attempt<=m_cfg.orderRetries;attempt++)
         {
          if(m_trade.PositionModify(ticket,newSl,newTp) && IsOkRetcode(m_trade.ResultRetcode()))
