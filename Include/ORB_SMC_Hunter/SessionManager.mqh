@@ -15,14 +15,21 @@
 #include "DataService.mqh"
 
 //+------------------------------------------------------------------+
-//| Awal hari broker (00:00 waktu server) utk timestamp sembarang.      |
+//| Awal hari BROKER (server clock 00:00) utk timestamp sembarang.      |
+//| v1.08 FIX: dulu pakai TimeToStruct/StructToTime yang bekerja pada    |
+//| TIMEZONE MESIN (PC) — bila TZ terminal ≠ TZ broker (mis. PC WIB+7    |
+//| vs server GMT+2/+3) MIDNIGHT MELESET 4-5 jam sehingga seluruh jendela |
+//| sesi (OR formation, live window, force-close) bergeser; pada jam      |
+//| testing sesi bisa tampak 'tidak pernah hidup' → tanpa breakout.       |
+//| Sekarang anchor = serverOffset (jam; dari m_cfg.gmtOffset yang        |
+//| auto-ukur v1.05 / fallback manual): midnight = t - ((t+off)%86400).   |
 //+------------------------------------------------------------------+
-datetime HUNT_BrokerDayStart(const datetime t)
+datetime HUNT_BrokerDayStart(const datetime t,const int serverOffsetHours)
   {
-   MqlDateTime dt;
-   TimeToStruct(t,dt);
-   dt.hour=0; dt.min=0; dt.sec=0;
-   return(StructToTime(dt));
+   long secs=((long)t + (long)serverOffsetHours*3600) % 86400;
+   if(secs<0)
+      secs+=86400;
+   return((datetime)((long)t - secs));
   }
 
 class CSessionManager
@@ -219,7 +226,7 @@ public:
    /** true bila nowBroker pindah hari → catat hari baru, minta rollover. */
    bool              CheckDailyRolloverRequired(const datetime nowBroker)
      {
-      datetime d=HUNT_BrokerDayStart(nowBroker);
+      datetime d=HUNT_BrokerDayStart(nowBroker,m_cfg.gmtOffset);
       if(d==m_day || m_day==0)
          return(false);
       m_day=d;
@@ -233,7 +240,7 @@ public:
    bool              Init(const SHunterSettings &cfg,const datetime nowBroker)
      {
       m_cfg=cfg;
-      m_day=HUNT_BrokerDayStart(nowBroker);
+      m_day=HUNT_BrokerDayStart(nowBroker,m_cfg.gmtOffset);
       for(int s=0;s<HUNT_SESSION_COUNT;s++)
         {
          m_or[s].Reset();
@@ -269,7 +276,12 @@ public:
                            HUNT_NAME,s,sz,m_cfg.minRangePips);
               }
             else
+              {
                m_or[s].status=ORB_STATUS_RANGING;
+               PrintFormat("%s | %s: OR terbentuk @ %.5f (%.1f pips, %d bar) — tunggu breakout",
+                           HUNT_NAME,SessionName(s),m_or[s].high,
+                           sz,m_or[s].bars);
+              }
            }
          if(m_or[s].breakoutTime>0)
             m_or[s].barsSinceBreakout++;
@@ -279,7 +291,7 @@ public:
    /** Reset total (awal hari trading baru). */
    void              ResetDaily(const datetime nowBroker)
      {
-      m_day=HUNT_BrokerDayStart(nowBroker);
+      m_day=HUNT_BrokerDayStart(nowBroker,m_cfg.gmtOffset);
       for(int i=0;i<HUNT_SESSION_COUNT;i++)
         {
          m_or[i].Reset();
