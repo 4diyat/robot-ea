@@ -24,7 +24,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.111"
+#property version     "1.112"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -674,7 +674,7 @@ void                ApplyAutoDstWindows(void)
                HUNT_NAME,y,mo,d,(euD?"dst":"std"),(usD?"dst":"std"),
                sh[1],eh[1],sh[2],eh[2],
                ((sh[1]-off)%24+24)%24,((eh[1]-off)%24+24)%24,
-               ((sh[2]-off)%24+24)%24);
+               ((sh[2]-off)%24+24)%24,((eh[2]-off)%24+24)%24);
   }
 
 //+------------------------------------------------------------------+
