@@ -55,6 +55,8 @@ InpPipSizeOverride=0.0
 InpOrderRetries=3
 InpOrderRetryDelayMs=500
 InpPendingExpireHours=72
+InpLotMode=1
+InpFixedLots=0.01
 InpMode=1
 InpSwingCloseOnOppChoch=1
 ;--- OB/OS (dashboard)

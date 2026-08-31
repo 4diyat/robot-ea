@@ -129,24 +129,34 @@ public:
          plan.note="arah plan tidak valid";
          return(false);
         }
+      bool   fixedMode=(m_cfg.lotMode==HUNT_LOT_FIXED);
       double moneyRisk=RiskBase()*m_cfg.riskPercent/100.0;
-      double lots=CalcLots(moneyRisk,MathAbs(plan.entry-plan.sl),data);
+      double lots;
+      if(fixedMode)
+         lots=m_cfg.fixedLots;                  // risiko efektif = |entry-SL| x nilai lot
+      else
+         lots=CalcLots(moneyRisk,MathAbs(plan.entry-plan.sl),data);
+      if(lots<data.VolumeMin())
+         lots=data.VolumeMin();                 // FIXED < min broker → angkat ke min
       lots=data.NormalizeVolume(lots);
       if(lots<=0.0)
         {
-         plan.note="lot hasil sizing tidak valid";
+         plan.note="lot tidak valid (cek InpFixedLots)";
          return(false);
         }
-      //--- Guard kontrak besar (kripto/indeks dgn VolumeMin >> kebutuhan):
-      //--- normalisasi TIDAK boleh menggelembungkan risiko >150% budget.
-      double tsz=data.TickSize();
-      if(tsz>0.0)
+      if(!fixedMode)
         {
-         double lossPerLot=MathAbs(plan.entry-plan.sl)/tsz*data.TickValue();
-         if(lossPerLot>0.0 && lots*lossPerLot>moneyRisk*1.5)
+         //--- Guard kontrak besar (kripto/indeks dgn VolumeMin >> kebutuhan):
+         //--- normalisasi TIDAK boleh menggelembungkan risiko >150% budget.
+         double tsz=data.TickSize();
+         if(tsz>0.0)
            {
-            plan.note="min lot broker >> budget risiko (naikkan balance atau perlebar SL)";
-            return(false);
+            double lossPerLot=MathAbs(plan.entry-plan.sl)/tsz*data.TickValue();
+            if(lossPerLot>0.0 && lots*lossPerLot>moneyRisk*1.5)
+              {
+               plan.note="min lot broker >> budget risiko (naikkan balance atau perlebar SL)";
+               return(false);
+              }
            }
         }
       plan.lots=lots;

@@ -23,7 +23,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.102"
+#property version     "1.103"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -80,6 +80,8 @@ input ENUM_ENTRY_MODE     InpEntryMode = ENTRY_PENDING_ORDER;  // 0=Execution(ma
 input group "=== Risk Settings ==="
 input double              InpRiskPercent     = 0.5;             // Risiko per trade (% dari basis)
 input ENUM_HUNT_RISK_BASE InpRiskBase      = HUNT_RISK_BASE_BALANCE; // Basis risiko
+input ENUM_HUNT_LOT_MODE  InpLotMode       = HUNT_LOT_FIXED;   // FIXED = lot tetap; ADAPTIVE = sizing % risiko
+input double              InpFixedLots     = 0.01;            // Ukuran lot FIXED (dinormalkan ke step broker)
 input double              InpMinRR           = 2.0;             // RR minimum (ke TP akhir)
 input double              InpTP1RR           = 1.0;             // RR TP1 untuk partial (0=off)
 input double              InpPartialClosePct = 50.0;            // % ditutup di TP1
@@ -229,6 +231,8 @@ bool SnapshotSettings(SHunterSettings &s)
    s.swingCloseOnOppChoch =InpSwingCloseOnOppChoch;
    s.riskPercent          =InpRiskPercent;
    s.riskBase             =InpRiskBase;
+   s.lotMode              =InpLotMode;
+   s.fixedLots            =InpFixedLots;
    s.minRR                =InpMinRR;
    s.tp1RR                =InpTP1RR;
    s.partialClosePct      =InpPartialClosePct;
@@ -278,6 +282,8 @@ bool SnapshotSettings(SHunterSettings &s)
       err="InpMaxExtensionBeforeRetest harus 5..500 (%)";
    else if(s.riskPercent<0.01 || s.riskPercent>10.0)
       err="InpRiskPercent harus 0.01..10";
+   else if(s.fixedLots<=0.0 || s.fixedLots>100.0)
+      err="InpFixedLots harus >0 dan <=100";
    else if(s.minRR<0.5 || s.minRR>20.0)
       err="InpMinRR harus 0.5..20";
    else if(s.tp1RR<0.0 || s.tp1RR>=s.minRR)
@@ -1282,7 +1288,9 @@ void RealtimeTick()
          if(hit)
            {
             double part=g_risk.PartialCloseVolume(vol,g_data);
-            if(part>0.0 && g_exec.ClosePosition(tk,part,"TP1 partial"))
+            //--- FIXED lot kecil: part bisa 0 (< VolumeMin) — partial SKIP,
+            //--- tapi BE tetap dipasang (jangan menggantung tiap tick)
+            if(part<=0.0 || g_exec.ClosePosition(tk,part,"TP1 partial"))
               {
                g_plan[s].partialDone=true;
                //--- buffer BE: maks(2 point, stops-level+1) → valid utk
@@ -1293,8 +1301,10 @@ void RealtimeTick()
                double be=g_data.NormalizePrice(g_plan[s].entry+
                            (dir==HUNT_DIR_BUY ? beBuf : -beBuf));
                g_exec.ModifySl(tk,be,tp);
-               PrintFormat("%s | %s: TP1 partial %.2f lot, SL -> %s",HUNT_NAME,
-                           CSessionManager::SessionName(s),part,
+               string pTxt=(part>0.0 ? StringFormat("partial %.2f lot",part)
+                                     : "partial skip (<= VolumeMin)");
+               PrintFormat("%s | %s: TP1 %s, SL -> %s",HUNT_NAME,
+                           CSessionManager::SessionName(s),pTxt,
                            DoubleToString(be,g_data.Digits()));
               }
            }
@@ -1533,6 +1543,11 @@ int OnInit()
    RealtimeTick();
    PrintFormat("%s v%s init OK | TF=%s magic=%I64d pip=%.5f",HUNT_NAME,HUNT_VERSION,
                EnumToString(_Period),g_settings.magic,g_settings.pipSize);
+   if(g_settings.lotMode==HUNT_LOT_FIXED)
+      PrintFormat("%s | LOT=FIXED %.3f per trade (InpRiskPercent diabaikan; daily-limit, margin check & RR-min tetap aktif)",
+                  HUNT_NAME,g_settings.fixedLots);
+   else
+      PrintFormat("%s | LOT=ADAPTIVE %.2f%% risiko per trade",HUNT_NAME,g_settings.riskPercent);
    if(g_settings.mode==HUNT_MODE_SWING)
       PrintFormat("%s | MODE=SWING: force-close OFF, retest>=40 bar, SL buffer>=0.5xAtr, minRR>=2.5, TP1>=1.5R, pending-exp>=48 jam. Posisi CARRY overnight — perhitungkan SWAP. Chart disarankan H1/H4.",HUNT_NAME);
    return(INIT_SUCCEEDED);

@@ -56,6 +56,8 @@ struct SHunterSettings
    //--- Risk
    double          riskPercent;
    ENUM_HUNT_RISK_BASE riskBase;
+   int             lotMode;            // ENUM_HUNT_LOT_MODE
+   double          fixedLots;          // ukuran utk HUNT_LOT_FIXED
    double          minRR;                // ke TP akhir
    double          tp1RR;                // 0 = partial off
    double          partialClosePct;
@@ -131,6 +133,8 @@ void SettingsDefaults(SHunterSettings &s)
    s.minScore              = 60;
    s.riskPercent           = 0.5;
    s.riskBase              = HUNT_RISK_BASE_BALANCE;
+   s.lotMode                 = 1;
+   s.fixedLots               = 0.01;
    s.minRR                 = 2.0;
    s.tp1RR                 = 1.0;
    s.partialClosePct       = 50.0;
