@@ -1,18 +1,20 @@
 ; ORB_SMC_Hunter v0.90 — preset BACKTEST (Strategy Tester)
 ; News OFF (WebRequest tidak tersedia di tester), semua visual OFF (render
 ; memperlambat backtest), konfluensi sedikit dilonggarkan utk sample sinyal.
-; Waktu sesi dianggap UTC+2 (broker) — atur InpGMTOffset sesuai data broker!
+; Jam sesi = UTC kanonik (Asia 0-6, London 7-16, NY 12-20). Offset broker-UTC
+; otomatis (InpAutoGmt=true); InpGMTOffset hanya fallback bila auto gagal.
 InpEnableAsia=true
-InpAsiaStart=2
-InpAsiaEnd=8
+InpAsiaStart=0
+InpAsiaEnd=6
 InpEnableLondon=true
-InpLondonStart=14
-InpLondonEnd=22
+InpLondonStart=7
+InpLondonEnd=16
 InpEnableNY=true
-InpNYStart=19
-InpNYEnd=3
-InpTimeBase=0
+InpNYStart=12
+InpNYEnd=20
+InpTimeBase=1
 InpGMTOffset=2
+InpAutoGmt=true
 InpRangeMinutes=30
 InpMinRangePips=0.0
 InpBreakoutBufferPips=0.0

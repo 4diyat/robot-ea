@@ -31,10 +31,10 @@ Urutan include: `Defines → Settings → DataService → Session → ORB → SM
 | A1 | **Settings snapshot** (`SHunterSettings`) — modul TIDAK membaca `Inp*` | validasi terpusat, modul teruji terpisah, tanpa magic global | input baru butuh reinit (MT5 memang me-reload EA) |
 | A2 | **CDataService** satu sumber bar/handle/quotes | `CopyRates`/`CopyBuffer` sekali per bar (NextGen: beberapa modul memanggil sendiri) | cache butuh invalidasi manual saat bar baru — sudah dikontrol `UpdateOnBar` |
 | A3 | **SZone terunifikasi** (OB & FVG satu tipe+enum) | satu jalur kode retest/mitigasi/expiry/render | label spesifik OB vs FVG tetap tersimpan via `type` |
-| A4 | **State machine PER SESI** (`g_state[3]`) | sesi boleh overlap (London 14–22 & NY 19–03); force-close tidak mengganggu sesi lain | orkestrasi lebih eksplisit di file utama |
+| A4 | **State machine PER SESI** (`g_state[3]`) | sesi boleh overlap (London 07–16 & NY 12–20 UTC = overlap 12–16); force-close tidak mengganggu sesi lain | orkestrasi lebih eksplisit di file utama |
 | A5 | Prefix objek `HUNT_*` (bukan `ORBSMC_*`) + **ledger** nama objek | `OnDeinit`/rebuild tidak menabrak objek EA lain milik user | perlu ledger maintenance (di-renderer) |
-| A6 | Jam sesi default **broker time** (`InpTimeBase` bisa di-switch ke UTC) | sesuai teks spesifikasi; DST broker-independent | user harus set `InpGMTOffset` benar utk news |
-| A7 | UTC internal via `HuntNowUtc()` (tester-aware) | `TimeGMT()` tak reliable di Strategy Tester | offset GMT manual utk mode tester |
+| A6 | Jam sesi default **UTC kanonik** (Asia 0–6, London 7–16, NY 12–20) + `InpTimeBase=UTC`; offset broker−UTC auto-ukur `InpAutoGmt` (TimeGMT) | benar di server timezone apa pun; drift musiman ±1 jam tetap ada (jam pasar fixed vs DST lokal) | user bisa switch basis BROKER + manual offset |
+| A7 | UTC internal via `HuntNowUtc()` (tester-aware) | `TimeGMT()` tak reliable di Strategy Tester → hasil auto-ukur di-clamp −12..14; di luar itu fallback `InpGMTOffset` (diuji saat OnInit) | — |
 
 ## 3. State machine (per sesi)
 

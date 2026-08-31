@@ -2,22 +2,24 @@
 ; pasang di chart H1 (atau H4); force-close OFF; posisi carry overnight (SWAP!)
 ; ORB_SMC_Hunter v0.90 — preset DEFAULT (demo/live)
 ; Semua sesi aktif, EntryMode=PENDING_ORDER(1), news ON, visual lengkap.
-; Catatan: InpGMTOffset=2 asumsi broker UTC+2 (sesuaikan!). Jam sesi = waktu BROKER.
+; Catatan: jam sesi = UTC kanonik (Asia 0-6, London 7-16, NY 12-20); offset
+; broker-UTC auto-ukur (InpAutoGmt=true), InpGMTOffset fallback utk tester.
 ; enum: InpTimeBase 0=broker 1=UTC | InpRiskBase 0=balance 1=equity
 ;       InpEntryMode 0=Execution 1=PendingOrder | InpDashboardCorner 0..3 (ENUM_BASE_CORNER)
 
 ;--- Session
 InpEnableAsia=true
-InpAsiaStart=2
-InpAsiaEnd=8
+InpAsiaStart=0
+InpAsiaEnd=6
 InpEnableLondon=true
-InpLondonStart=14
-InpLondonEnd=22
+InpLondonStart=7
+InpLondonEnd=16
 InpEnableNY=true
-InpNYStart=19
-InpNYEnd=3
-InpTimeBase=0
+InpNYStart=12
+InpNYEnd=20
+InpTimeBase=1
 InpGMTOffset=2
+InpAutoGmt=true
 ;--- ORB
 InpRangeMinutes=30
 InpMinRangePips=0.0

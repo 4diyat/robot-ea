@@ -2,16 +2,17 @@
 ; Beda dgn Default hanya di InpEntryMode=0 + skor sedikit lebih ketat (recompensation
 ; utk eksekusi lambat): minRR naik, retest bars turun.
 InpEnableAsia=true
-InpAsiaStart=2
-InpAsiaEnd=8
+InpAsiaStart=0
+InpAsiaEnd=6
 InpEnableLondon=true
-InpLondonStart=14
-InpLondonEnd=22
+InpLondonStart=7
+InpLondonEnd=16
 InpEnableNY=true
-InpNYStart=19
-InpNYEnd=3
-InpTimeBase=0
+InpNYStart=12
+InpNYEnd=20
+InpTimeBase=1
 InpGMTOffset=2
+InpAutoGmt=true
 InpRangeMinutes=30
 InpMinRangePips=0.0
 InpBreakoutBufferPips=0.0

@@ -13,9 +13,10 @@
 //|   Tanpa izin, fetch gagal → EA TETAP jalan (fail-safe): filter news  |
 //|   nonaktif, peringatan di log & dashboard "NO DATA".                |
 //|                                                                    |
-//| WAKTU: jam sesi = waktu BROKER chart (InpTimeBase bisa diubah ke     |
-//|   UTC). InpGMTOffset = broker − UTC (jam) utk konversi jam news &    |
-//|   display. Pip otomatis dari digits (5/3/2 → 10×point; lain → point).|
+//| WAKTU: jam sesi default = UTC kanonik (Asia 0–6, London 7–16,       |
+//|   NY 12–20) dengan InpTimeBase=UTC; offset broker−UTC DIUKUR OTOMATIS|
+//|   via TimeGMT (InpAutoGmt=true; manual InpGMTOffset = fallback).      |
+//|   Pip otomatis dari digits (5/3/2 → 10×point; lain → point).          |
 //|                                                                    |
 //| ANTI-REPAINT/LOOKAHEAD: keputusan sinyal HANYA pada CLOSED bar       |
 //|   (back=0 = shift 1). Bar berjalan hanya utk monitoring real-time     |
@@ -23,7 +24,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.104"
+#property version     "1.105"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -35,16 +36,17 @@
 //===================================================================
 input group "=== Session Settings ==="
 input bool                InpEnableAsia      = true;            // Aktifkan sesi Asia
-input int                 InpAsiaStart       = 2;               // Asia mulai (jam)
-input int                 InpAsiaEnd         = 8;               // Asia selesai (jam)
+input int                 InpAsiaStart       = 0;               // Asia mulai (jam; basis InpTimeBase)
+input int                 InpAsiaEnd         = 6;               // Asia selesai (jam)
 input bool                InpEnableLondon    = true;            // Aktifkan sesi London
-input int                 InpLondonStart     = 14;              // London mulai (jam)
-input int                 InpLondonEnd       = 22;              // London selesai (jam)
+input int                 InpLondonStart     = 7;               // London mulai (jam)
+input int                 InpLondonEnd       = 16;              // London selesai (jam)
 input bool                InpEnableNY        = true;            // Aktifkan sesi New York
-input int                 InpNYStart         = 19;              // NY mulai (jam)
-input int                 InpNYEnd           = 3;               // NY selesai (jam; <mulai = lintas tengah malam)
-input ENUM_HUNT_TIME_BASE InpTimeBase        = HUNT_TIME_BASE_BROKER; // Basis jam input sesi
-input int                 InpGMTOffset       = 2;               // Offset broker − UTC (jam)
+input int                 InpNYStart         = 12;              // NY mulai (jam)
+input int                 InpNYEnd           = 20;              // NY selesai (jam; <mulai = lintas tengah malam)
+input ENUM_HUNT_TIME_BASE InpTimeBase        = HUNT_TIME_BASE_UTC; // Basis jam input sesi (UTC default)
+input bool                InpAutoGmt         = true;            // Auto-ukur offset broker−UTC via TimeGMT
+input int                 InpGMTOffset       = 2;               // Fallback manual broker−UTC (jam; auto-off/gagal)
 
 input group "=== ORB Settings ==="
 input int                 InpRangeMinutes    = 30;              // Durasi Opening Range (menit pertama sesi)
@@ -320,6 +322,8 @@ bool SnapshotSettings(SHunterSettings &s)
            InpLondonStart<0||InpLondonStart>23||InpLondonEnd<0||InpLondonEnd>23||
            InpNYStart<0||InpNYStart>23||InpNYEnd<0||InpNYEnd>23)
       err="Jam sesi harus 0..23";
+   else if(!InpAutoGmt && (InpGMTOffset<-12 || InpGMTOffset>14))
+      err="InpGMTOffset harus -12..14 (atau set InpAutoGmt=true)";
    else if(s.slAtrMult<0.0 || s.slAtrMult>2.0)
       err="InpSLBufferAtrMult harus 0..2";
    if(err!="")
@@ -359,6 +363,17 @@ bool SnapshotSettings(SHunterSettings &s)
          s.pendingExpireHours=48;
       if(s.maxExtensionPct<45.0)
          s.maxExtensionPct=45.0;
+     }
+   //--- offset broker−UTC: auto-ukur di chart; tester → fallback manual (A7) ----
+   if(InpAutoGmt)
+     {
+      datetime gt=TimeGMT();
+      int off=(gt>0) ? (int)MathRound((double)(TimeCurrent()-gt)/3600.0) : 99;
+      if(off>=-12 && off<=14)
+         s.gmtOffset=off;
+      else
+         PrintFormat("%s | AUTO-GMT tidak valid (tester?) → fallback manual %d jam",
+                     HUNT_NAME,s.gmtOffset);
      }
    //--- jam sesi → ruang BROKER ------------------------------------------------
    int inStart[HUNT_SESSION_COUNT]={InpAsiaStart,InpLondonStart,InpNYStart};
@@ -1561,6 +1576,15 @@ int OnInit()
                   HUNT_NAME,g_settings.fixedLots);
    else
       PrintFormat("%s | LOT=ADAPTIVE %.2f%% risiko per trade",HUNT_NAME,g_settings.riskPercent);
+   for(int sidx=0;sidx<HUNT_SESSION_COUNT;sidx++)
+     {
+      int ush=((g_settings.startHourBrk[sidx]-g_settings.gmtOffset)%24+24)%24;
+      int ueh=((g_settings.endHourBrk[sidx]-g_settings.gmtOffset)%24+24)%24;
+      PrintFormat("%s | SESI %s: %02d:00-%02d:00 broker = UTC %02d:00-%02d:00%s",HUNT_NAME,
+                  CSessionManager::SessionName(sidx),g_settings.startHourBrk[sidx],
+                  g_settings.endHourBrk[sidx],ush,ueh,
+                  (g_settings.enableSession[sidx]?"":" (OFF)"));
+     }
    if(g_settings.mode==HUNT_MODE_SWING)
       PrintFormat("%s | MODE=SWING: force-close OFF, retest>=40 bar, SL buffer>=0.5xAtr, minRR>=2.5, TP1>=1.5R, pending-exp>=48 jam. Posisi CARRY overnight — perhitungkan SWAP. Chart disarankan H1/H4.",HUNT_NAME);
    return(INIT_SUCCEEDED);
