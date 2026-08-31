@@ -24,7 +24,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.108"
+#property version     "1.109"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -44,7 +44,7 @@ input int                 InpLondonEnd       = 16;              // London selesa
 input bool                InpEnableNY        = true;            // Aktifkan sesi New York
 input int                 InpNYStart         = 12;              // NY mulai (jam)
 input int                 InpNYEnd           = 20;              // NY selesai (jam; <mulai = lintas tengah malam)
-input ENUM_HUNT_TIME_BASE InpTimeBase        = HUNT_TIME_BASE_UTC; // Basis jam input sesi (UTC default)
+input ENUM_HUNT_TIME_BASE InpTimeBase        = HUNT_TIME_BASE_UTC; // Basis: 0=broker 1=UTC 2=AUTO-DST bursa
 input bool                InpAutoGmt         = true;            // Auto-ukur offset broker−UTC via TimeGMT
 input int                 InpGMTOffset       = 2;               // Fallback manual broker−UTC (jam; auto-off/gagal)
 
@@ -391,7 +391,7 @@ bool SnapshotSettings(SHunterSettings &s)
    for(int i=0;i<HUNT_SESSION_COUNT;i++)
      {
       int sh=inStart[i],eh=inEnd[i];
-      if(InpTimeBase==HUNT_TIME_BASE_UTC)
+      if(InpTimeBase!=HUNT_TIME_BASE_BROKER)
         {
          sh=sh+s.gmtOffset;
          eh=eh+s.gmtOffset;
@@ -578,7 +578,103 @@ void ApplyLiquidityTp(SSignalPlan &p)
          p.tp1=0.0;                     // partial off — TP2 lebih dekat dari TP1
      }
    p.rrFinal=dist/slDist;
-   p.note+=" | TP=liq";
+   p.note+=" | TP=liq"//+------------------------------------------------------------------+
+//| v1.09 AUTODST — aritmetika kalender TZ-immune (civil_from_days    |
+//| Hinnant); 0=Minggu.                                                |
+//+------------------------------------------------------------------+
+int                 WeekdaySun(const int y,const int mo,const int d)
+  {
+   int yy=y-(mo<=2?1:0);
+   int era=(yy>=0?yy:yy-399)/400;
+   int yoe=yy-era*400;
+   int doy=(153*(mo+(mo>2?-3:9))+2)/5+d-1;
+   int doe=yoe*365+yoe/4-yoe/100+doy;
+   long di=(long)era*146097+doe-719468;
+   int wd=(int)((di+4)%7);
+   if(wd<0)
+      wd+=7;
+   return(wd);
+  }
+//--- EU: aktif sejak Minggu-terakhir Maret s/d SEBELUM Minggu-terakhir
+//--- Okt (switch-back 01:00 UTC, sesi hari itu sudah waktu standar).
+bool                EuDstActive(const int y,const int mo,const int d)
+  {
+   if(mo<3 || mo>10)
+      return(false);
+   if(mo==3)
+      return(d>=31-WeekdaySun(y,3,31));
+   if(mo==10)
+      return(d< 31-WeekdaySun(y,10,31));
+   return(true);
+  }
+//--- US: aktif sejak Minggu-ke-2 Maret s/d SEBELUM Minggu-ke-1 Nov.
+bool                UsDstActive(const int y,const int mo,const int d)
+  {
+   if(mo<3 || mo>11)
+      return(false);
+   if(mo==3)
+     {
+      int first=1+((7-WeekdaySun(y,3,1))%7);
+      return(d>=first+7);
+     }
+   if(mo==11)
+     {
+      int first=1+((7-WeekdaySun(y,11,1))%7);
+      return(d<first);
+     }
+   return(true);
+  }
+void                AutoDstBrokerDate(int &y,int &mo,int &d)
+  {
+   long off=(long)g_settings.gmtOffset*3600;
+   long dayIdx=((long)g_sessions.CurrentDayUtc()+off)/86400;   // UTC midnight tgl broker
+   long z=dayIdx+719468;
+   long era=(z>=0?z:z-146096)/146097;
+   long doe=z-era*146097;
+   long yoe=(doe-doe/1460+doe/36524-doe/146096)/365;
+   long yyyy=yoe+era*400;
+   long doy=doe-(365*yoe+yoe/4-yoe/100);
+   long mp=(5*doy+2)/153;
+   d =(int)(doy-(153*mp+2)/5+1);
+   mo=(int)(mp+(mp>9?-9:3));
+   y =(int)(yyyy+(mo<=2?1:0));
+  }
+//+------------------------------------------------------------------+
+//| v1.09: hitung jam sesi utk basis AUTODST — London/NY dari JAM     |
+//| LOKAL bursa (input) minus offset zona (0/+1 UK; -5/-4 NY) sesuai   |
+//| aturan DST legal → UTC → broker. Asia: input = UTC apa adanya     |
+//| (anchor Tokyo/Sydney tidak bergeser utk jendela ini). Hasil identik |
+//| tabel sesi pihak ketiga (myfxzodiac, Forex Factory) tanpa jaringan. |
+//+------------------------------------------------------------------+
+void                ApplyAutoDstWindows(void)
+  {
+   if(InpTimeBase!=HUNT_TIME_BASE_AUTODST)
+      return;
+   int y=0,mo=0,d=0;
+   AutoDstBrokerDate(y,mo,d);
+   bool euD=EuDstActive(y,mo,d),usD=UsDstActive(y,mo,d);
+   int off=g_settings.gmtOffset;
+   int sh[HUNT_SESSION_COUNT],eh[HUNT_SESSION_COUNT];
+   sh[HUNT_SESSION_ASIA]  =((InpAsiaStart    +off)%24+24)%24;
+   eh[HUNT_SESSION_ASIA]  =((InpAsiaEnd      +off)%24+24)%24;
+   sh[HUNT_SESSION_LONDON]=(((InpLondonStart-(euD?1:0))+off)%24+24)%24;
+   eh[HUNT_SESSION_LONDON]=(((InpLondonEnd  -(euD?1:0))+off)%24+24)%24;
+   sh[HUNT_SESSION_NY]    =(((InpNYStart    +5-(usD?1:0))+off)%24+24)%24;
+   eh[HUNT_SESSION_NY]    =(((InpNYEnd      +5-(usD?1:0))+off)%24+24)%24;
+   g_sessions.ApplySessionHours(sh,eh);
+   for(int i=0;i<HUNT_SESSION_COUNT;i++)
+     {
+      g_settings.startHourBrk[i]=sh[i];
+      g_settings.endHourBrk[i]  =eh[i];
+     }
+   PrintFormat("%s | AUTO-DST %04d.%02d.%02d (EU:%s US:%s) → broker LON %02d-%02d NY %02d-%02d | UTC LON %02d-%02d NY %02d-%02d",
+               HUNT_NAME,y,mo,d,(euD?"dst":"std"),(usD?"dst":"std"),
+               sh[1],eh[1],sh[2],eh[2],
+               ((sh[1]-off)%24+24)%24,((eh[1]-off)%24+24)%24,
+               ((sh[2]-off)%24+24)%24,((eh[2]-off)%24+24)%24);
+  }
+
+;
   }
 
 //+------------------------------------------------------------------+
@@ -1009,6 +1105,8 @@ void PipelineOnNewBar()
    const datetime nowBrk=TimeCurrent();
    if(g_sessions.CheckDailyRolloverRequired(nowBrk))
      {
+      g_sessions.ResetDaily(nowBrk);              // v1.09 FIX: rebuild jendela sesi per hari
+      ApplyAutoDstWindows();
       g_risk.OnNewDay(g_sessions.CurrentDayUtc(),AccountInfoDouble(ACCOUNT_BALANCE));
       g_smc.ResetDaily(g_sessions.GetDayStartUtc());
       g_orb.ResetAll();
@@ -1625,6 +1723,7 @@ int OnInit()
       return(INIT_FAILED);
      }
    g_sessions.Init(g_settings,TimeCurrent());
+   ApplyAutoDstWindows();
    g_orb.Init(g_settings);
    g_smc.Init(g_settings,g_sessions.GetDayStartUtc());
    g_conf.Init(g_settings);

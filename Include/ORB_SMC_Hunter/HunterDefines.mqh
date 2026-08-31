@@ -25,7 +25,7 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 
 //=== EA identity =====================================================
 #define HUNT_NAME             "ORB_SMC_Hunter"
-#define HUNT_VERSION          "1.08"
+#define HUNT_VERSION          "1.09"
 
 //=== Prefix objek chart (1 per kategori render) ======================
 #define HUNT_PREFIX_OR        "HUNT_OR_"     // garis opening range per sesi
@@ -153,7 +153,8 @@ enum ENUM_HUNT_MODE
 enum ENUM_HUNT_TIME_BASE
   {
    HUNT_TIME_BASE_BROKER = 0,    // jam input = waktu chart/broker
-   HUNT_TIME_BASE_UTC    = 1     // jam input = UTC (konversi via GMT offset)
+   HUNT_TIME_BASE_UTC    = 1,    // jam input = UTC (konversi via GMT offset)
+   HUNT_TIME_BASE_AUTODST= 2     // London/NY = jam LOKAL bursa + aturan DST
   };
 
 //=== Basis perhitungan risiko =========================================

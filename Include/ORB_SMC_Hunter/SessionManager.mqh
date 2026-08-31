@@ -288,6 +288,18 @@ public:
         }
       m_active=ActiveSession(nowBroker);
      }
+   /** v1.09: override jam sesi (ruang broker) + rebuild jendela hari ini.
+       Dipakai main utk basis AUTODST (dipanggil saat init & rollover). */
+   void              ApplySessionHours(const int &sh[],const int &eh[])
+     {
+      for(int i=0;i<HUNT_SESSION_COUNT;i++)
+        {
+         m_cfg.startHourBrk[i]=sh[i];
+         m_cfg.endHourBrk[i]  =eh[i];
+         if(m_cfg.enableSession[i] && m_day>0)
+            BuildSessionWindows(i,m_day);
+        }
+     }
    /** Reset total (awal hari trading baru). */
    void              ResetDaily(const datetime nowBroker)
      {
