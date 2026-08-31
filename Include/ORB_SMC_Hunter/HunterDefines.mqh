@@ -25,7 +25,7 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 
 //=== EA identity =====================================================
 #define HUNT_NAME             "ORB_SMC_Hunter"
-#define HUNT_VERSION          "1.12"
+#define HUNT_VERSION          "1.13"
 
 //=== Prefix objek chart (1 per kategori render) ======================
 #define HUNT_PREFIX_OR        "HUNT_OR_"     // garis opening range per sesi
@@ -37,6 +37,7 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 #define HUNT_PREFIX_PIV       "HUNT_PIV_"    // garis pivot harian
 #define HUNT_PREFIX_VP        "HUNT_VP_"     // histogram volume profile
 #define HUNT_PREFIX_NEWS      "HUNT_NEWS_"   // vline + shading window news
+#define HUNT_PREFIX_SESS      "HUNT_SESS_"   // band latar sesi (rectangle fill)
 #define HUNT_PREFIX_DASH      "HUNT_DASH_"   // panel dashboard
 #define HUNT_OBJ_FILTER       "HUNT_"        // filter prefix utk sweep cleanup
 #define HUNT_PREFIX_BG        "HUNT_DASH_BG"   // background panel (1 objek)
@@ -45,6 +46,13 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 #define HUNT_COL_ASIA         clrDodgerBlue
 #define HUNT_COL_LONDON       clrOrange
 #define HUNT_COL_NY           clrMediumOrchid
+//--- band latar sesi: solid gelap (tanpa alpha, back=true) + varian live
+#define HUNT_COL_BAND_ASIA      C'10,26,40'
+#define HUNT_COL_BAND_LONDON    C'40,28,8'
+#define HUNT_COL_BAND_NY        C'30,14,40'
+#define HUNT_COL_BAND_ASIA_ON   C'14,42,64'
+#define HUNT_COL_BAND_LONDON_ON C'64,44,10'
+#define HUNT_COL_BAND_NY_ON     C'50,22,66'
 #define HUNT_COL_BULL         clrSeaGreen
 #define HUNT_COL_BEAR         clrIndianRed
 #define HUNT_COL_READY        clrLime
@@ -273,6 +281,7 @@ enum ENUM_HUNT_LEDGER
    HUNT_LED_PIV,      // HUNT_PIV_*
    HUNT_LED_VP,       // HUNT_VP_*
    HUNT_LED_NEWS,     // HUNT_NEWS_*
+   HUNT_LED_SESS,     // HUNT_SESS_* (v1.13 band latar)
    HUNT_LED_COUNT
   };
 

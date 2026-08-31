@@ -24,7 +24,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.113"
+#property version     "1.114"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -124,6 +124,7 @@ input group "=== Visual Settings ==="
 input bool                InpShowOB          = true;            // Order Block boxes
 input bool                InpShowFVG         = true;            // Fair Value Gap boxes
 input bool                InpShowStructure   = true;            // BOS/CHoCH + HH/HL/LH/LL
+input bool                InpShowSessionBands = true;           // Band latar jam sesi (Asia/London/NY) full-height
 input bool                InpShowSweep       = true;            // Liquidity sweep markers
 input bool                InpShowEntryArrows = true;            // Entry arrows + labels
 input bool                InpShowPivot       = true;            // Daily pivots PP/R/S
@@ -275,6 +276,7 @@ bool SnapshotSettings(SHunterSettings &s)
    s.showOB               =InpShowOB;
    s.showFvg              =InpShowFVG;
    s.showStructure        =InpShowStructure;
+   s.showSessionBands     =InpShowSessionBands;
    s.showSweep            =InpShowSweep;
    s.showEntryArrows      =InpShowEntryArrows;
    s.showPivot            =InpShowPivot;
@@ -1141,6 +1143,7 @@ void UpdatePerformanceSection(void)
 //+------------------------------------------------------------------+
 void RenderAllStaticLayers(const datetime nowBrk)
   {
+   g_visual.RenderSessionBands(g_sessions,nowBrk);
    g_visual.RenderOpeningRanges(g_sessions,g_data,nowBrk);
    g_visual.RenderZones(g_smc,nowBrk);
    g_visual.RenderStructure(g_smc);

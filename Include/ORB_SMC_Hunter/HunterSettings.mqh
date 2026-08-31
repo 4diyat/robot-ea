@@ -95,6 +95,7 @@ struct SHunterSettings
    bool            showOB;
    bool            showFvg;
    bool            showStructure;
+   bool            showSessionBands;   // v1.13: band latar per sesi
    bool            showSweep;
    bool            showEntryArrows;
    bool            showPivot;
@@ -177,6 +178,7 @@ void SettingsDefaults(SHunterSettings &s)
    s.showOB                = true;
    s.showFvg               = true;
    s.showStructure         = true;
+   s.showSessionBands      = true;
    s.showSweep             = true;
    s.showEntryArrows       = true;
    s.showPivot             = true;

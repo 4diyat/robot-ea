@@ -92,5 +92,6 @@ InpShowNewsMarkers=true
 ;--- General
 InpMagicNumber=20260830
 InpShowDashboard=true
+InpShowSessionBands=true
 InpDashboardCorner=0
 InpDashboardFontSize=9

@@ -81,5 +81,6 @@ InpShowVolumeProfile=false
 InpShowNewsMarkers=false
 InpMagicNumber=20260832
 InpShowDashboard=false
+InpShowSessionBands=false
 InpDashboardCorner=0
 InpDashboardFontSize=9

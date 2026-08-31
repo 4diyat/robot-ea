@@ -284,6 +284,59 @@ public:
      }
 
    //+---------------------------------------------------------------+
+   //| 0. Band LATAR sesi — rectangle terisi full-tinggi chart per      |
+   //| jendela sesi, hari ini + 3 hari ke belakang (pengulangan harian,   |
+   //| jam broker). Warna solid gelap (constraint TANPA alpha);          |
+   //| OBJPROP_BACK=true → candle tetap di depan; sesi LIVE memakai      |
+   //| varian lebih terang. Rebuild per bar via ledger HUNT_LED_SESS.     |
+   //+---------------------------------------------------------------+
+   void              RenderSessionBands(const CSessionManager &sessions,const datetime nowBrk)
+     {
+      LedgerClear(HUNT_LED_SESS);
+      if(!m_cfg.showSessionBands)
+         return;
+      datetime day0=sessions.GetDayStartUtc();
+      if(day0<=0)
+         return;
+      for(int d=3;d>=0;d--)                      // hari ini + 3 lampau
+        {
+         datetime day=day0-d*86400;
+         for(int s=0;s<HUNT_SESSION_COUNT;s++)
+           {
+            if(!m_cfg.enableSession[s])
+               continue;
+            datetime t1=day+m_cfg.startHourBrk[s]*3600;
+            datetime t2=day+m_cfg.endHourBrk[s]*3600;
+            if(t2<=t1)
+               t2+=86400;                         // wrap tengah malam
+            if(t1>nowBrk+7200)
+               continue;                          // tak menggambar masa depan
+            bool liveNow=(nowBrk>=t1 && nowBrk<t2);
+            color c;
+            if(s==HUNT_SESSION_ASIA)
+               c=(liveNow ? HUNT_COL_BAND_ASIA_ON : HUNT_COL_BAND_ASIA);
+            else if(s==HUNT_SESSION_LONDON)
+               c=(liveNow ? HUNT_COL_BAND_LONDON_ON : HUNT_COL_BAND_LONDON);
+            else
+               c=(liveNow ? HUNT_COL_BAND_NY_ON : HUNT_COL_BAND_NY);
+            string nm=StringFormat("%s%d_%I64d",HUNT_PREFIX_SESS,s,(long)t1);
+            BaseObj(nm,OBJ_RECTANGLE);
+            ObjectSetInteger(0,nm,OBJPROP_COLOR,c);
+            ObjectSetInteger(0,nm,OBJPROP_BGCOLOR,c);
+            ObjectSetInteger(0,nm,OBJPROP_FILL,true);
+            ObjectSetInteger(0,nm,OBJPROP_BACK,true);
+            ObjectSetInteger(0,nm,OBJPROP_ZORDER,-1);
+            ObjectSetDouble(0,nm,OBJPROP_PRICE,0,1.0e8);
+            ObjectSetDouble(0,nm,OBJPROP_PRICE,1,-1.0e8);
+            ObjectSetInteger(0,nm,OBJPROP_TIME,0,(long)t1);
+            ObjectSetInteger(0,nm,OBJPROP_TIME,1,(long)t2);
+            LedgerAdd(HUNT_LED_SESS,nm,0);
+            Touch(nm);
+           }
+        }
+     }
+
+   //+---------------------------------------------------------------+
    //| 1. Garis OR per sesi — hanya sesi dgn range formed; hapus saat     |
    //| sesi lain mulai (rebuild kategori tiap bar). Warn per sesi.        |
    //+---------------------------------------------------------------+
