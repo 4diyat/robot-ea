@@ -25,7 +25,7 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 
 //=== EA identity =====================================================
 #define HUNT_NAME             "ORB_SMC_Hunter"
-#define HUNT_VERSION          "1.09"
+#define HUNT_VERSION          "1.10"
 
 //=== Prefix objek chart (1 per kategori render) ======================
 #define HUNT_PREFIX_OR        "HUNT_OR_"     // garis opening range per sesi

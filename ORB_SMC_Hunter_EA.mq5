@@ -24,7 +24,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.109"
+#property version     "1.110"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -643,8 +643,8 @@ void                AutoDstBrokerDate(int &y,int &mo,int &d)
 //| v1.09: hitung jam sesi utk basis AUTODST — London/NY dari JAM     |
 //| LOKAL bursa (input) minus offset zona (0/+1 UK; -5/-4 NY) sesuai   |
 //| aturan DST legal → UTC → broker. Asia: input = UTC apa adanya     |
-//| (anchor Tokyo/Sydney tidak bergeser utk jendela ini). Hasil identik |
-//| tabel sesi pihak ketiga (myfxzodiac, Forex Factory) tanpa jaringan. |
+//| (anchor Tokyo/Sydney tidak bergeser utk jendela ini). SEMUA dihitung |
+//| lokal/offline — tanpa sumber atau tabel pihak ketiga (v1.10).        |
 //+------------------------------------------------------------------+
 void                ApplyAutoDstWindows(void)
   {
