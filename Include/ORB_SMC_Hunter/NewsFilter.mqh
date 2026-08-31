@@ -424,6 +424,7 @@ public:
          ev.timeBroker=ev.timeUtc+m_cfg.gmtOffset*3600;
          ev.currency=cur;
          ev.title=title;
+         ev.desc=DescribeEvent(title,imp,cur);
          ev.impact=(ENUM_HUNT_NEWS_IMPACT)imp;
          ev.relevant=true;
          ev.blockFrom=ev.timeBroker-m_cfg.newsBeforeMin*60;
@@ -451,6 +452,68 @@ public:
       PrintFormat("%s | news refreshed: %d event relevan utk %s%s",HUNT_NAME,m_count,m_cur1,
                   (m_cur2!="" ? ","+m_cur2 : ""));
       return(true);
+     }
+
+   //--- katalog deskripsi internal (v1.14; deterministik, tanpa dependensi  |
+   //--- markup eksternal). Cocokkan keyword lowercase; aturan SPESIFIK dulu.  |
+   string            DescribeEvent(const string title,const int impact,const string currency) const
+     {
+      string t=title;
+      StringToLower(t);
+      if(StringFind(t,"press conference")>=0 || StringFind(t,"presser")>=0)
+         return("Sesi tanya-jawab bank sentral; bisa menggerakkan pasar");
+      if(StringFind(t,"minutes")>=0)
+         return("Risalah rapat — sinyal arah kebijakan berikutnya");
+      if(StringFind(t,"statement")>=0)
+         return("Pernyataan kebijakan; risiko kejutan nada");
+      if(StringFind(t,"fomc")>=0)
+         return("Kebijakan moneter The Fed; volatilitas USD tinggi");
+      if(StringFind(t,"non-farm")>=0 || StringFind(t,"nonfarm")>=0 || StringFind(t,"payrolls")>=0)
+         return("Perubahan payroll AS; penggerak utama USD");
+      if(StringFind(t,"adp")>=0)
+         return("Survei ADP ketenagakerjaan — prakursor NFP");
+      if(StringFind(t,"jobless")>=0 || StringFind(t,"unemployment")>=0)
+         return("Ketenagakerjaan/klaim pengangguran — input The Fed");
+      if(StringFind(t,"cpi")>=0 || StringFind(t,"inflation rate")>=0)
+         return("Inflasi harga konsumen — input utama kebijakan bunga");
+      if(StringFind(t,"ppi")>=0)
+         return("Inflasi produsen — tekanan harga hulu");
+      if(StringFind(t,"pce")>=0)
+         return("Inflasi PCE — ukuran inflasi favorit bank sentral");
+      if(StringFind(t,"interest rate")>=0 || StringFind(t,"rate decision")>=0 ||
+         StringFind(t,"cash rate")>=0 || StringFind(t,"refi")>=0 ||
+         StringFind(t,"bank rate")>=0 || StringFind(t,"overnight rate")>=0)
+         return("Keputusan suku bunga bank sentral; volatilitas tinggi");
+      if(StringFind(t,"gdp")>=0)
+         return("Pertumbuhan ekonomi — rilis utama PDB");
+      if(StringFind(t,"retail sales")>=0)
+         return("Belanja konsumen — proxy permintaan domestik");
+      if(StringFind(t,"ism")>=0 || StringFind(t,"pmi")>=0)
+         return("Survei manajer pembelian (manufaktur/jasa)");
+      if(StringFind(t,"durable")>=0)
+         return("Pesanan barang tahan lama — leading industri");
+      if(StringFind(t,"consumer confidence")>=0 || StringFind(t,"sentix")>=0 ||
+         StringFind(t,"ifo")>=0 || StringFind(t,"michigan")>=0 || StringFind(t,"zio")>=0)
+         return("Survei keyakinan konsumen/bisnis");
+      if(StringFind(t,"housing")>=0 || StringFind(t,"building")>=0 ||
+         StringFind(t,"home sales")>=0 || StringFind(t,"permit")>=0)
+         return("Data properti & perumahan");
+      if(StringFind(t,"current account")>=0 || StringFind(t,"trade balance")>=0 ||
+         StringFind(t,"traded balance")>=0)
+         return("Neraca perdagangan / transaksi berjalan");
+      if(StringFind(t,"speech")>=0 || StringFind(t,"testimony")>=0 ||
+         StringFind(t,"congress")>=0 || StringFind(t,"powell")>=0)
+         return("Pidato pejabat — risiko kejutan nada kebijakan");
+      if(StringFind(t,"auction")>=0 || StringFind(t,"bond yield")>=0)
+         return("Lelang surat utang; sinyal permintaan obligasi");
+      if(StringFind(t,"crude")>=0 || StringFind(t,"oil inventories")>=0 ||
+         StringFind(t,"api")>=0 || StringFind(t,"eia")>=0)
+         return("Inventori minyak — penggerak harga crude");
+      if(impact>=3)
+         return("Event berdampak tinggi — potensi lonjakan volatilitas "+currency);
+      if(impact>=2)
+         return("Event berdampak sedang — pantau reaksi pasar "+currency);
+      return("Agenda ekonomi terjadwal "+currency);
      }
 
    //--- query ---------------------------------------------------------------
@@ -499,12 +562,30 @@ public:
          st.blockedEvent=lab;
         }
       st.lastFetchUtc=m_lastFetchBrk;
-      for(int i=0;i<m_count;i++)
+      st.nextInfo="";
+      int infoIdx=-1;
+      for(int i=0;i<m_count;i++)                        // prioritas: jendela aktif
+         if(nowBrk>=m_events[i].blockFrom && nowBrk<=m_events[i].blockTo)
+           {
+            infoIdx=i;
+            break;
+           }
+      for(int i=0;i<m_count && infoIdx<0;i++)            // lalu event terdekat
          if(m_events[i].timeBroker>nowBrk)
            {
+            infoIdx=i;
             st.nextEventUtc=m_events[i].timeBroker;
             break;
            }
+      if(infoIdx>=0)
+        {
+         if(st.nextEventUtc==0)
+            st.nextEventUtc=m_events[infoIdx].timeBroker;   // sedang diblokir: sama dgn event
+         MqlDateTime mt;
+         TimeToStruct(m_events[infoIdx].timeBroker,mt);
+         st.nextInfo=StringFormat("%s %02d:%02d %s — %s",m_events[infoIdx].currency,mt.hour,
+                                  mt.min,m_events[infoIdx].title,m_events[infoIdx].desc);
+        }
       return(st);
      }
    bool              IsStale(const datetime nowBrk) const

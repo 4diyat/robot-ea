@@ -607,10 +607,20 @@ public:
          string shortT=evs[i].title;
          if(StringLen(shortT)>28)
             shortT=StringSubstr(shortT,0,28)+"...";
-         DrawTextLabel(HUNT_PREFIX_NEWS+id+"lbl",evs[i].timeBroker,
+         string shortD=evs[i].desc;
+         if(StringLen(shortD)>44)
+            shortD=StringSubstr(shortD,0,44)+"...";
+         string lblN=HUNT_PREFIX_NEWS+id+"lbl";
+         DrawTextLabel(lblN,evs[i].timeBroker,
                        ChartGetDouble(0,CHART_PRICE_MAX),
-                       StringFormat("%s %s",evs[i].currency,shortT),c,7,ANCHOR_UPPER,
+                       StringFormat("%s %s\n%s",evs[i].currency,shortT,shortD),c,7,ANCHOR_UPPER,
                        HUNT_LED_NEWS,evs[i].blockTo+3600);
+         string tip=StringFormat("%s · %s — %s\nJendela blokir: %s s/d %s (broker)",
+                                 evs[i].currency,evs[i].title,evs[i].desc,
+                                 TimeToString(evs[i].blockFrom,TIME_DATE|TIME_MINUTES),
+                                 TimeToString(evs[i].blockTo,TIME_DATE|TIME_MINUTES));
+         ObjectSetString(0,lblN,OBJPROP_TOOLTIP,tip);
+         ObjectSetString(0,HUNT_PREFIX_NEWS+id,OBJPROP_TOOLTIP,tip);
         }
      }
 

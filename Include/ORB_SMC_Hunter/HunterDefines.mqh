@@ -25,7 +25,7 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 
 //=== EA identity =====================================================
 #define HUNT_NAME             "ORB_SMC_Hunter"
-#define HUNT_VERSION          "1.13"
+#define HUNT_VERSION          "1.14"
 
 //=== Prefix objek chart (1 per kategori render) ======================
 #define HUNT_PREFIX_OR        "HUNT_OR_"     // garis opening range per sesi
@@ -260,6 +260,7 @@ enum ENUM_HUNT_DASH_ROW
    HUNT_DASH_TODAY,                   // trade n/max + daily P/L
    //--- Section News
    HUNT_DASH_NEWS_STATE,             // status + event + countdown
+   HUNT_DASH_NEWS_DESC,              // deskripsi event berikunya/terblokir
    HUNT_DASH_NEWS_UPDATED,           // waktu fetch terakhir
    //--- Section Performa (riwayat transaksi EA)
    HUNT_DASH_PERF_SUMMARY,           // win rate | avgR | total (lookback)
@@ -486,6 +487,7 @@ struct SNewsEvent
    datetime          timeBroker;
    string            currency;
    string            title;
+   string            desc;          // v1.14: deskripsi singkat (katalog internal)
    ENUM_HUNT_NEWS_IMPACT impact;
    bool              relevant;        // lolos filter currency+impact
    datetime          blockFrom;       // timeBroker - InpNewsBufferBeforeMin
@@ -502,6 +504,7 @@ struct SNewsStatus
    string            blockedEvent;    // "USD · FOMC · dlm 12m"
    datetime          lastFetchUtc;
    datetime          nextEventUtc;
+   string            nextInfo;        // v1.14: "CUR HH:MM title — desc" utk dashboard
    int               eventCount;      // relevan hari ini ( utk render )
   };
 

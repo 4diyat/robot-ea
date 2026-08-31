@@ -24,7 +24,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.114"
+#property version     "1.115"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -1655,6 +1655,18 @@ void RealtimeTick()
                     (StringFind(newsLine,"BLOCK")>=0 ? clrRed :
                      (StringFind(newsLine,"STALE")>=0 ||
                       StringFind(newsLine,"NO DATA")>=0 ? clrOrange : clrGray)));
+      string descLine="Desk: news filter OFF";
+      if(g_settings.newsEnabled)
+        {
+         if(ns.nextInfo!="")
+            descLine="Desk: "+ns.nextInfo;
+         else if(!ns.hasData)
+            descLine="Desk: data belum tersedia";
+         else
+            descLine="Desk: bersih — tanpa event terjadwal";
+        }
+      g_dash.SetRow(HUNT_DASH_NEWS_DESC,descLine,
+                    (ns.blockedNow ? clrOrange : (descLine=="Desk: news filter OFF" ? clrGray : clrSilver)));
       string today=StringFormat("Today: %d/%d trades | P/L %+.2f (%.1f%% vs -%.1f%%)",
                                 g_risk.TradesToday(),g_risk.MaxTrades(),g_risk.DailyPnl(),
                                 g_risk.DailyPnlPct(),g_risk.MaxDailyLossPct());
