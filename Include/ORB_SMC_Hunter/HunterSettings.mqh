@@ -40,6 +40,10 @@ struct SHunterSettings
    double          liqTolPips;           // klaster equal highs/lows
    bool            useFvgAsZone;         // FVG boleh jadi zona retest
    bool            smcScopeDay;          // anchor sweep/BOS/zona: hari(true)/sesi(false)
+   bool            useBreakers;          // v1.07: OB gagal → breaker retest zone
+   bool            requireInducement;    // v1.07: gate minor-liq pra-break
+   bool            requireDiscount;      // v1.07: gate discount/premium zona
+   bool            tpUseLiquidity;       // v1.07: TP2 = pool liq terdekat
    double          slAtrMult;            // buffer SL melampaui struktur (×ATR)
    double          obDisplacementAtr;    // displacement OB minimal (× ATR)
    int             atrPeriod;
@@ -124,6 +128,10 @@ void SettingsDefaults(SHunterSettings &s)
    s.liqTolPips            = 2.0;
    s.useFvgAsZone          = true;
    s.smcScopeDay           = false;
+   s.useBreakers           = false;
+   s.requireInducement     = false;
+   s.requireDiscount       = false;
+   s.tpUseLiquidity        = false;
    s.slAtrMult             = 0.2;
    s.obDisplacementAtr     = 1.0;
    s.atrPeriod             = 14;

@@ -25,7 +25,7 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 
 //=== EA identity =====================================================
 #define HUNT_NAME             "ORB_SMC_Hunter"
-#define HUNT_VERSION          "1.06"
+#define HUNT_VERSION          "1.07"
 
 //=== Prefix objek chart (1 per kategori render) ======================
 #define HUNT_PREFIX_OR        "HUNT_OR_"     // garis opening range per sesi
@@ -170,7 +170,9 @@ enum ENUM_HUNT_ZONE_TYPE
    HUNT_ZONE_OB_BULL  = 1,
    HUNT_ZONE_OB_BEAR  = 2,
    HUNT_ZONE_FVG_BULL = 3,
-   HUNT_ZONE_FVG_BEAR = 4
+   HUNT_ZONE_FVG_BEAR = 4,
+   HUNT_ZONE_BREAKER_BULL = 5, // v1.07: OB bear dipatahkan naik → support
+   HUNT_ZONE_BREAKER_BEAR = 6  // v1.07: OB bull dipatahkan turun → resistance
   };
 
 enum ENUM_HUNT_ZONE_STATE
@@ -396,6 +398,8 @@ struct SSMCContext
    double            extensionPct;     // % range yang sudah ditempuh saat ini
    double            rsi;              // info dashboard; bukan gate kecuali diminta
    bool              rsiExtreme;       // overbought/oversold searah breakout
+   bool              inducementSwept;  // v1.07: minor liq tersapu pra-break
+   bool              pricePosOk;       // v1.07: zona di discount/premium range hari
   };
 
 //+------------------------------------------------------------------+

@@ -335,7 +335,8 @@ public:
          SZone z=zs[i];
          if(z.state==HUNT_ZONE_INVALID)
             continue;                              // dihapus (bukan cuma hide)
-         bool bull=(z.type==HUNT_ZONE_OB_BULL||z.type==HUNT_ZONE_FVG_BULL);
+         bool bull=(z.type==HUNT_ZONE_OB_BULL||z.type==HUNT_ZONE_FVG_BULL||
+                    z.type==HUNT_ZONE_BREAKER_BULL);
          bool fvg=(z.type==HUNT_ZONE_FVG_BULL||z.type==HUNT_ZONE_FVG_BEAR);
          if(fvg && !m_cfg.showFvg)
             continue;
@@ -352,7 +353,8 @@ public:
                      (mit ? clrDimGray : c),fvg,HUNT_LED_OB,zexp);
          if(mit)
             DrawTextLabel(nm+"~mit",t2e,z.top,
-                          (fvg ? "FVG filled" : "OB mit."),clrDimGray,7,ANCHOR_LEFT_LOWER,
+                          (fvg ? "FVG filled" : (z.type>=HUNT_ZONE_BREAKER_BULL ?
+                                                   "BRK mit." : "OB mit.")),clrDimGray,7,ANCHOR_LEFT_LOWER,
                           (fvg ? HUNT_LED_FVG : HUNT_LED_OB),zexp);
         }
      }

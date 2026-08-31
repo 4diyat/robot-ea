@@ -1,4 +1,6 @@
-; ORB_SMC_Hunter v0.90 — preset DEFAULT (demo/live)
+; ORB_SMC_Hunter v1.07 — preset SMC+ (demo/live): breaker, inducement,
+; discount-zone, TP-likuiditas AKTIF. Bila sinyal terlalu sepi, turunkan
+; InpMinConfluenceScore (60→55) sebelum melonggarkan gate lain.
 ; Semua sesi aktif, EntryMode=PENDING_ORDER(1), news ON, visual lengkap.
 ; Catatan: jam sesi = UTC kanonik (Asia 0-6, London 7-16, NY 12-20); offset
 ; broker-UTC auto-ukur (InpAutoGmt=true), InpGMTOffset fallback utk tester.
@@ -33,10 +35,10 @@ InpMaxExtensionBeforeRetest=50.0
 InpLiqTolerancePips=2.0
 InpUseFVGAsZone=true
 InpSmcScopeDay=false
-InpUseBreakerBlocks=false
-InpRequireInducement=false
-InpRequireDiscountZone=false
-InpTpLiquidity=false
+InpUseBreakerBlocks=true
+InpRequireInducement=true
+InpRequireDiscountZone=true
+InpTpLiquidity=true
 InpOBDisplacementAtr=1.0
 InpSLBufferAtrMult=0.2
 InpATRPeriod=14

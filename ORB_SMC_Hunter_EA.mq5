@@ -24,7 +24,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.106"
+#property version     "1.107"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -66,6 +66,10 @@ input double              InpMaxExtensionBeforeRetest = 50.0;   // Ekstensi maks
 input double              InpLiqTolerancePips = 2.0;            // Toleransi equal highs/lows (pips)
 input bool                InpUseFVGAsZone    = true;            // FVG boleh jadi zona retest
 input bool                InpSmcScopeDay     = false;           // Sweep/BOS/zona: false=jendela sesi, true=sejak awal hari broker
+input bool                InpUseBreakerBlocks = false;          // v1.07: OB patah → breaker zone (retest sisi lain)
+input bool                InpRequireInducement = false;         // v1.07: wajib sweep minor-liquidity sebelum breakout
+input bool                InpRequireDiscountZone = false;       // v1.07: zona wajib di discount(BUY)/premium(SELL) range hari
+input bool                InpTpLiquidity       = false;         // v1.07: TP2 = pool likuiditas terdekat (RR-min tetap dijaga)
 input double              InpOBDisplacementAtr = 1.0;           // Displacement OB minimum (×ATR)
 input double              InpSLBufferAtrMult = 0.2;             // Buffer SL melampaui struktur (×ATR)
 input int                 InpATRPeriod       = 14;              // Periode ATR (buffer SL & volatilitas)
@@ -227,6 +231,10 @@ bool SnapshotSettings(SHunterSettings &s)
    s.liqTolPips           =InpLiqTolerancePips;
    s.useFvgAsZone         =InpUseFVGAsZone;
    s.smcScopeDay          =InpSmcScopeDay;
+   s.useBreakers          =InpUseBreakerBlocks;
+   s.requireInducement    =InpRequireInducement;
+   s.requireDiscount      =InpRequireDiscountZone;
+   s.tpUseLiquidity       =InpTpLiquidity;
    s.slAtrMult            =InpSLBufferAtrMult;
    s.obDisplacementAtr    =InpOBDisplacementAtr;
    s.atrPeriod            =InpATRPeriod;
@@ -488,6 +496,38 @@ void FillSmcContext(const int s,const SOpenRange &r,const ENUM_HUNT_DIR dir,
    ctx.rsiExtreme=(ctx.rsi!=DBL_MAX &&
                    ((dir==HUNT_DIR_BUY && ctx.rsi>=g_settings.obosUpper) ||
                     (dir==HUNT_DIR_SELL && ctx.rsi<=g_settings.obosLower)));
+   //--- v1.07 inducement: minor low(BUY)/high(SELL) tersapu SETELAH anchor dan
+   //--- SEBELUM bar breakout (manipulasi leg pra-break)
+   ctx.inducementSwept=false;
+   datetime tw=g_smc.LastMinorSweep(dir);
+   if(tw>=since && g_lastBo[s].time>0 && tw<=g_lastBo[s].time)
+      ctx.inducementSwept=true;
+   //--- v1.07 posisi zona vs range HARI ini (discount utk BUY / premium SELL)
+   ctx.pricePosOk=false;
+   if(ctx.zoneFound)
+     {
+      double dHi=0.0,dLo=0.0;
+      bool have=false;
+      int nb=g_data.ClosedBars();
+      for(int bb=0;bb<nb;bb++)
+        {
+         MqlRates br2;
+         if(!g_data.GetClosedBar(bb,br2) || br2.time<since)
+            break;
+         if(!have)
+           { dHi=br2.high; dLo=br2.low; have=true; }
+         else
+           {
+            if(br2.high>dHi) dHi=br2.high;
+            if(br2.low<dLo)  dLo=br2.low;
+           }
+        }
+      if(have && dHi>dLo)
+        {
+         double eq=(dHi+dLo)/2.0;
+         ctx.pricePosOk=(dir==HUNT_DIR_BUY ? ctx.zoneTop<=eq : ctx.zoneBottom>=eq);
+        }
+     }
   }
 
 //+------------------------------------------------------------------+
@@ -507,6 +547,38 @@ bool RetestReaction(const int s,const SSignalPlan &plan)
    if(plan.dir==HUNT_DIR_BUY)
       return(br.close>br.open && br.close>mid);
    return(br.close<br.open && br.close<mid);
+  }
+
+//+------------------------------------------------------------------+
+//| v1.07: pindahkan TP2 ke pool likuiditas BELUM-tersapu terdekat searah |
+//| bila RR tetap ≥ min dan jarak ≤ 4×ATR; TP1 dinormalkan (off bila ≥TP2)|
+//+------------------------------------------------------------------+
+void ApplyLiquidityTp(SSignalPlan &p)
+  {
+   double cand=g_smc.NextLiqTarget(p.dir,p.entry);
+   if(cand<=0.0)
+      return;
+   double slDist=(p.dir==HUNT_DIR_BUY ? p.entry-p.sl : p.sl-p.entry);
+   if(slDist<=0.0)
+      return;
+   double dist=MathAbs(cand-p.entry);
+   double atr=g_data.Atr(0);
+   if(atr>0.0 && dist>4.0*atr)
+      return;
+   if(dist/slDist<g_settings.minRR)
+      return;
+   p.tp2=g_data.NormalizePrice(cand);
+   if(g_settings.tp1RR<=0.0)
+      p.tp1=0.0;
+   else
+     {
+      double t1d=(p.dir==HUNT_DIR_BUY ? 1.0 : -1.0)*g_settings.tp1RR*slDist;
+      p.tp1=g_data.NormalizePrice(p.entry+t1d);
+      if(MathAbs(p.tp1-p.entry)>=MathAbs(p.tp2-p.entry))
+         p.tp1=0.0;                     // partial off — TP2 lebih dekat dari TP1
+     }
+   p.rrFinal=dist/slDist;
+   p.note+=" | TP=liq";
   }
 
 //+------------------------------------------------------------------+
@@ -1146,6 +1218,8 @@ void ProcessSession(const int s,const datetime nowBrk)
             AdvanceState(s,HUNT_STATE_WAIT_BREAKOUT);
             break;
            }
+         if(g_settings.tpUseLiquidity)
+            ApplyLiquidityTp(plan);
          if(g_settings.entryMode==ENTRY_PENDING_ORDER && ctx.zoneFound)
            {
             if(!g_exec.PlacePending(plan,g_data))
@@ -1251,6 +1325,8 @@ void ProcessSession(const int s,const datetime nowBrk)
                break;
               }
            }
+         if(g_settings.tpUseLiquidity)
+            ApplyLiquidityTp(g_plan[s]);
          if(g_exec.OpenMarket(g_plan[s],g_data))
            {
             g_risk.RegisterOpenedTrade();

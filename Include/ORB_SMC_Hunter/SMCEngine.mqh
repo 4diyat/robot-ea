@@ -28,6 +28,7 @@
 #define HUNT_SCAN_BARS     400      // kedalaman rebuild utk exec TF
 #define HUNT_OB_SCAN_BACK  12       // maks candle mundur utk cari OB
 #define HUNT_USED_MEMO     16
+#define HUNT_BREAKER_TMP   24      // seed breaker maks per rebuild
 
 class CSMCEngine
   {
@@ -54,6 +55,7 @@ private:
    bool                m_chEvReady;
    datetime            m_usedTimes[HUNT_USED_MEMO];   // persist antar-rebuild
    int                 m_usedCount;
+   datetime            m_minorSweptT[2];        // v1.07 inducement: [0]=low [1]=high
 
    //=== helper --------------------------------------------------------
    void                ClearCollections(void)
@@ -126,12 +128,15 @@ private:
    bool                ZoneDirMatches(const SZone &z,const ENUM_HUNT_DIR dir) const
      {
       if(dir==HUNT_DIR_BUY)
-         return(z.type==HUNT_ZONE_OB_BULL || z.type==HUNT_ZONE_FVG_BULL);
-      return(z.type==HUNT_ZONE_OB_BEAR || z.type==HUNT_ZONE_FVG_BEAR);
+         return(z.type==HUNT_ZONE_OB_BULL || z.type==HUNT_ZONE_FVG_BULL ||
+                z.type==HUNT_ZONE_BREAKER_BULL);
+      return(z.type==HUNT_ZONE_OB_BEAR || z.type==HUNT_ZONE_FVG_BEAR ||
+             z.type==HUNT_ZONE_BREAKER_BEAR);
      }
    bool                ZoneIsBull(const SZone &z) const
      {
-      return(z.type==HUNT_ZONE_OB_BULL || z.type==HUNT_ZONE_FVG_BULL);
+      return(z.type==HUNT_ZONE_OB_BULL || z.type==HUNT_ZONE_FVG_BULL ||
+              z.type==HUNT_ZONE_BREAKER_BULL);
      }
    bool                ZoneIsFvg(const SZone &z) const
      {
@@ -288,6 +293,37 @@ private:
          i=j-1;                                  // lanjut dr luar klaster
         }
      }
+   /** v1.07 (inducement): sweep TERAKHIR tiap minor swing (satu-sentuhan) sisi
+       low/high dalam jendela rebuild — SATU pass, deterministik, closed-bar. */
+   void                BuildInducement(const CDataService &data)
+     {
+      m_minorSweptT[0]=0;
+      m_minorSweptT[1]=0;
+      if(!m_cfg.requireInducement)
+         return;
+      int n=MathMin(data.ClosedBars(),HUNT_SCAN_BARS);
+      int swN=m_swingCount;
+      for(int b=n-1;b>=0;b--)                     // tua→baru
+        {
+         MqlRates br;
+         if(!data.GetClosedBar(b,br))
+            break;
+         if(br.time<m_fromTime)
+            continue;
+         for(int i=0;i<swN;i++)
+           {
+            if(br.time<=m_swings[i].time)
+               continue;
+            if(m_swings[i].type==HUNT_DIR_SELL)
+              {
+               if(br.low<m_swings[i].price)
+                  m_minorSweptT[0]=br.time;        // minor low tersapu
+              }
+            else if(br.high>m_swings[i].price)
+               m_minorSweptT[1]=br.time;           // minor high tersapu
+          }
+        }
+     }
    void                BuildOrderBlocks(const CDataService &data)
      {
       if(m_structCount==0)
@@ -350,6 +386,9 @@ private:
    void                UpdateZonesVsBars(const CDataService &data)
      {
       int n=MathMin(data.ClosedBars(),HUNT_SCAN_BARS);
+      ENUM_HUNT_ZONE_TYPE brkT[HUNT_BREAKER_TMP];    // v1.07 seed breaker
+      double            brkTop[HUNT_BREAKER_TMP],brkBot[HUNT_BREAKER_TMP];
+      datetime          brkTime[HUNT_BREAKER_TMP];
       for(int z=0;z<m_zoneCount;z++)
         {
          SZone zn=m_zones[z];
@@ -359,6 +398,8 @@ private:
          zn.extendTime=zn.createdTime;
          bool bull=ZoneIsBull(zn);
          bool fvg=ZoneIsFvg(zn);
+         bool isBrk=(zn.type==HUNT_ZONE_BREAKER_BULL||zn.type==HUNT_ZONE_BREAKER_BEAR);
+         int  brkCnt=0;
          for(int b=n-1;b>=0;b--)                  // kronologis → state akhir
            {
             MqlRates br;
@@ -377,9 +418,20 @@ private:
                zn.state=HUNT_ZONE_INVALID;
             else
                zn.state=HUNT_ZONE_MITIGATED;
+            if(farCross && m_cfg.useBreakers && !fvg && !isBrk &&
+               brkCnt<HUNT_BREAKER_TMP)           // v1.07: OB patah → breaker
+              {
+               brkT[brkCnt]=(bull ? HUNT_ZONE_BREAKER_BEAR : HUNT_ZONE_BREAKER_BULL);
+               brkTop[brkCnt]=zn.top;
+               brkBot[brkCnt]=zn.bottom;
+               brkTime[brkCnt]=br.time;            // createdTime = bar pematah
+               brkCnt++;
+              }
             if(zn.state==HUNT_ZONE_INVALID)
                break;                             // tak bisa hidup lagi
            }
+         for(int q=0;q<brkCnt;q++)
+            AddZoneUnique(brkT[q],brkTop[q],brkBot[q],brkTime[q]);
          if(zn.extendTime==zn.createdTime)
             zn.extendTime=data.CurrentBarTime();
          if(zn.usedForEntry)
@@ -581,6 +633,8 @@ public:
       m_cfg=cfg;
       m_fromTime=windowFrom;
       ClearCollections();
+      m_minorSweptT[0]=0;
+      m_minorSweptT[1]=0;
       return(true);
      }
 
@@ -591,6 +645,7 @@ public:
       BuildSwings(data);
       BuildStructure(data);
       BuildPools(data);
+      BuildInducement(data);
       BuildOrderBlocks(data);
       BuildFvgs(data);
       UpdateZonesVsBars(data);
@@ -638,6 +693,26 @@ public:
             m_pools[i].sweptTime>t)
             t=m_pools[i].sweptTime;
       return(t);
+     }
+   /** v1.07: waktu sweep minor-liquidity terakhir (low utk BUY / high utk SELL). */
+   datetime          LastMinorSweep(const ENUM_HUNT_DIR dir) const
+     {  return(m_minorSweptT[dir==HUNT_DIR_BUY ? 0 : 1]); }
+   /** v1.07: level pool BELUM tersapu terdekat searah beyond price; 0 = none. */
+   double            NextLiqTarget(const ENUM_HUNT_DIR dir,const double price) const
+     {
+      double best=0.0;
+      bool found=false;
+      for(int i=0;i<m_poolCount;i++)
+        {
+         if(m_pools[i].swept || m_pools[i].level<=0.0)
+            continue;
+         double lv=m_pools[i].level;
+         if(dir==HUNT_DIR_BUY ? (lv<=price) : (lv>=price))
+            continue;
+         if(!found || (dir==HUNT_DIR_BUY ? lv<best : lv>best))
+           { best=lv; found=true; }
+        }
+      return(found ? best : 0.0);
      }
    bool              HasStructureShift(const ENUM_HUNT_DIR dir,const datetime since) const
      {

@@ -8,7 +8,8 @@
 //|  (bias None = TIDAK lolos) · G3 pool searah di-sweep (bila         |
 //|  requireLiquiditySweep) · G4 zona OB/FVG tersedia (requireRetest;  |
 //|  false = opt-in sadar entry-langsung, lihat docs) · G5 bebas window |
-//|  news (veto mutlak) · G6 spread · G7 risk-ok.                      |
+//|  news (veto mutlak) · G6 spread · G7 risk-ok. v1.07 opt-in: +G3b    |
+//|  inducement · +G4b discount/premium — BOBOT SKOR TETAP 7 komponen.  |
 //| Skor lunak ≥ minScore: +25 sweep · +20 BOS pasca-sweep · +15 zona   |
 //|  fresh · +15 range>2×ATR · +10 extension<½maks · +10 RSI bukan      |
 //|  ekstrem searah · +5 sesi London/NY.                               |
@@ -130,6 +131,12 @@ public:
       //--- G4 — zona retest (false = opt-in entry langsung; lihat docs)
       if(m_cfg.requireRetest && !smc.zoneFound)
          AddReason(rep,"G4: tidak ada OB/FVG utk retest");
+      //--- G3b (v1.07, opt-in) — inducement: minor liq tersapu pra-break
+      if(m_cfg.requireInducement && !smc.inducementSwept)
+         AddReason(rep,"G3b: minor liquidity belum tersapu");
+      //--- G4b (v1.07, opt-in) — zona di discount/premium range hari
+      if(m_cfg.requireDiscount && smc.zoneFound && !smc.pricePosOk)
+         AddReason(rep,"G4b: zona di luar discount/premium");
       //--- G6 — spread
       if(m_cfg.maxSpreadPips>0.0 && spreadPips>m_cfg.maxSpreadPips)
          AddReason(rep,"G6: spread di atas batas");
