@@ -297,6 +297,8 @@ public:
                      CNewsFilter(void) : m_count(0), m_lastFetchBrk(0),
                                          m_hasData(false) {}
 
+   /** v1.12: offset baru utk konversi UTC→broker pada fetch berikutnya. */
+   void              UpdateGmtOffset(const int off) { m_cfg.gmtOffset=off; }
    bool              Init(const SHunterSettings &cfg)
      {
       m_cfg=cfg;

@@ -2,7 +2,8 @@
 ; News OFF (WebRequest tidak tersedia di tester), semua visual OFF (render
 ; memperlambat backtest), konfluensi sedikit dilonggarkan utk sample sinyal.
 ; Jam sesi = UTC kanonik (Asia 0-6, London 7-16, NY 12-20). Offset broker-UTC
-; otomatis (InpAutoGmt=true); InpGMTOffset hanya fallback bila auto gagal.
+; otomatis (InpAutoGmt=true) HANYA di chart — DI TESTER auto OFF, EA selalu
+; pakai InpGMTOffset manual: SET = TZ server data backtest (GMT+2→2, GMT+3→3)!
 InpEnableAsia=true
 InpAsiaStart=0
 InpAsiaEnd=6

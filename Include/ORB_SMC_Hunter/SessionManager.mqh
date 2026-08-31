@@ -288,6 +288,8 @@ public:
         }
       m_active=ActiveSession(nowBroker);
      }
+   /** v1.12: sinkronkan offset broker−UTC utk day-anchor & konversi internal. */
+   void              UpdateGmtOffset(const int off) { m_cfg.gmtOffset=off; }
    /** v1.09: override jam sesi (ruang broker) + rebuild jendela hari ini.
        Dipakai main utk basis AUTODST (dipanggil saat init & rollover). */
    void              ApplySessionHours(const int &sh[],const int &eh[])

@@ -24,7 +24,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.112"
+#property version     "1.113"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -45,8 +45,8 @@ input bool                InpEnableNY        = true;            // Aktifkan sesi
 input int                 InpNYStart         = 12;              // NY mulai (jam)
 input int                 InpNYEnd           = 20;              // NY selesai (jam; <mulai = lintas tengah malam)
 input ENUM_HUNT_TIME_BASE InpTimeBase        = HUNT_TIME_BASE_UTC; // Basis: 0=broker 1=UTC 2=AUTO-DST bursa
-input bool                InpAutoGmt         = true;            // Auto-ukur offset broker−UTC via TimeGMT
-input int                 InpGMTOffset       = 2;               // Fallback manual broker−UTC (jam; auto-off/gagal)
+input bool                InpAutoGmt         = true;            // Auto-ukur offset broker−UTC (chart; tester selalu pakai manual)
+input int                 InpGMTOffset       = 2;               // Offset broker−UTC manual (jam) — WAJIB benar di tester
 
 input group "=== ORB Settings ==="
 input int                 InpRangeMinutes    = 30;              // Durasi Opening Range (menit pertama sesi)
@@ -374,8 +374,11 @@ bool SnapshotSettings(SHunterSettings &s)
       if(s.maxExtensionPct<45.0)
          s.maxExtensionPct=45.0;
      }
-   //--- offset broker−UTC: auto-ukur di chart; tester → fallback manual (A7) ----
-   if(InpAutoGmt)
+   //--- offset broker−UTC: auto-ukur DI CHART SAJA — di tester TimeGMT() ==
+   //--- TimeCurrent() (jam server simulasi) sehingga pengukuran SELALU 0 dan
+   //--- silent-wrong; tester wajib pakai InpGMTOffset manual (A7). Lihat
+   //--- ReapplyTimeBaseWindows() utk pembaruan harian.                        |
+   if(InpAutoGmt && !(bool)MQLInfoInteger(MQL_TESTER))
      {
       datetime gt=TimeGMT();
       int off=(gt>0) ? (int)MathRound((double)(TimeCurrent()-gt)/3600.0) : 99;
@@ -675,6 +678,55 @@ void                ApplyAutoDstWindows(void)
                sh[1],eh[1],sh[2],eh[2],
                ((sh[1]-off)%24+24)%24,((eh[1]-off)%24+24)%24,
                ((sh[2]-off)%24+24)%24,((eh[2]-off)%24+24)%24);
+  }
+
+//+------------------------------------------------------------------+
+//| v1.12: ukur ulang offset broker−UTC + bangun ulang jam sesi tiap    |
+//| ganti hari. Chart → auto (TimeGMT; broker yang server-nya geser     |
+//| ikut ter-follow); tester → InpGMTOffset manual (TimeGMT di tester    |
+//| == jam server simulasi, pengukuran selalu 0).                         |
+//+------------------------------------------------------------------+
+void                ReapplyTimeBaseWindows(void)
+  {
+   const bool tester=(bool)MQLInfoInteger(MQL_TESTER);
+   int off=g_settings.gmtOffset;
+   if(InpAutoGmt && !tester)
+     {
+      datetime gt=TimeGMT();
+      int m=(gt>0) ? (int)MathRound((double)(TimeCurrent()-gt)/3600.0) : 99;
+      if(m>=-12 && m<=14)
+         off=m;
+     }
+   else
+      off=InpGMTOffset;
+   if(off!=g_settings.gmtOffset)
+      PrintFormat("%s | offset GMT broker diperbarui %+d → %+d jam (server DST-shift?)",
+                  HUNT_NAME,g_settings.gmtOffset,off);
+   g_settings.gmtOffset=off;
+   g_sessions.UpdateGmtOffset(off);
+   g_news.UpdateGmtOffset(off);
+   if(InpTimeBase==HUNT_TIME_BASE_AUTODST)
+     {
+      ApplyAutoDstWindows();                     // sudah sinkron sh/eh sendiri
+      return;
+     }
+   int sh[HUNT_SESSION_COUNT],eh[HUNT_SESSION_COUNT];
+   int inStart[HUNT_SESSION_COUNT]={InpAsiaStart,InpLondonStart,InpNYStart};
+   int inEnd  [HUNT_SESSION_COUNT]={InpAsiaEnd,InpLondonEnd,InpNYEnd};
+   for(int i=0;i<HUNT_SESSION_COUNT;i++)
+     {
+      int s0=inStart[i],e0=inEnd[i];
+      if(InpTimeBase==HUNT_TIME_BASE_UTC)
+        { s0+=off; e0+=off; }
+      sh[i]=((s0%24)+24)%24;
+      eh[i]=((e0%24)+24)%24;
+     }
+   g_sessions.ApplySessionHours(sh,eh);
+   for(int i=0;i<HUNT_SESSION_COUNT;i++)
+     {
+      g_settings.startHourBrk[i]=sh[i];
+      g_settings.endHourBrk[i]  =eh[i];
+     }
   }
 
 //+------------------------------------------------------------------+
@@ -1106,7 +1158,7 @@ void PipelineOnNewBar()
    if(g_sessions.CheckDailyRolloverRequired(nowBrk))
      {
       g_sessions.ResetDaily(nowBrk);              // v1.09 FIX: rebuild jendela sesi per hari
-      ApplyAutoDstWindows();
+      ReapplyTimeBaseWindows();                   // v1.12: re-ukur offset + jam sesi
       g_risk.OnNewDay(g_sessions.CurrentDayUtc(),AccountInfoDouble(ACCOUNT_BALANCE));
       g_smc.ResetDaily(g_sessions.GetDayStartUtc());
       g_orb.ResetAll();
@@ -1723,7 +1775,7 @@ int OnInit()
       return(INIT_FAILED);
      }
    g_sessions.Init(g_settings,TimeCurrent());
-   ApplyAutoDstWindows();
+   ReapplyTimeBaseWindows();
    g_orb.Init(g_settings);
    g_smc.Init(g_settings,g_sessions.GetDayStartUtc());
    g_conf.Init(g_settings);
