@@ -17,7 +17,7 @@
 #include "HunterSettings.mqh"
 #include "DataService.mqh"
 
-#define HUNT_FALSEBO_INSIDE  2      // bar close-dalam-range beruntun = void
+#define HUNT_FALSEBO_INSIDE  2      // DEFAULT ambang; live: m_cfg.falseBreakBars
 
 class CORBDetector
   {
@@ -97,7 +97,8 @@ public:
          else if(backInside)
            {
             m_insideCount[session]++;
-            if(m_insideCount[session]>=HUNT_FALSEBO_INSIDE)
+            if(m_cfg.falseBreakBars>0 &&
+               m_insideCount[session]>=m_cfg.falseBreakBars)
                orIn.status=ORB_STATUS_INVALIDATED;
            }
          else

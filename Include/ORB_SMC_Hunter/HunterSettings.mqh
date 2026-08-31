@@ -26,6 +26,7 @@ struct SHunterSettings
    //--- ORB
    int             rangeMinutes;
    double          minRangePips;
+   int             falseBreakBars;       // bar dalam-OR beruntun = void (0=off)
    double          breakoutBufferPips;   // jarak body-close di luar level OR
    bool            requireBodyClose;     // wick-only tidak dihitung
    //--- SMC
@@ -109,6 +110,7 @@ void SettingsDefaults(SHunterSettings &s)
    s.gmtOffset             = 0;
    s.rangeMinutes          = 30;
    s.minRangePips          = 0.0;
+   s.falseBreakBars        = 2;
    s.breakoutBufferPips    = 0.0;
    s.requireBodyClose      = true;
    s.swingLookback         = 3;

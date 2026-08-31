@@ -23,7 +23,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.103"
+#property version     "1.104"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -51,6 +51,7 @@ input int                 InpRangeMinutes    = 30;              // Durasi Openin
 input double              InpMinRangePips    = 0.0;             // Ukuran minimum OR (pips; 0=off)
 input double              InpBreakoutBufferPips = 0.0;          // Buffer close di luar level OR (pips)
 input bool                InpRequireBodyClose = true;           // Wajib body-close (wick-only ditolak)
+input int                 InpFalseBreakBars  = 2;               // Close kembali dlm OR N bar beruntun = false break (0=off)
 
 input group "=== SMC Settings ==="
 input int                 InpSwingLookback   = 3;               // Swing lookback kiri/kanan (bar closed)
@@ -211,6 +212,7 @@ bool SnapshotSettings(SHunterSettings &s)
    s.minRangePips         =InpMinRangePips;
    s.breakoutBufferPips   =InpBreakoutBufferPips;
    s.requireBodyClose     =InpRequireBodyClose;
+   s.falseBreakBars       =InpFalseBreakBars;
    s.swingLookback        =InpSwingLookback;
    s.chochLookback        = InpCHoCHSwingLookback;
    s.chochAlertMin        = MathMax(5,InpCHoCHAlertMinutes);
@@ -274,6 +276,8 @@ bool SnapshotSettings(SHunterSettings &s)
    string err="";
    if(s.rangeMinutes<1 || s.rangeMinutes>480)
       err="InpRangeMinutes harus 1..480";
+   else if(s.falseBreakBars<0 || s.falseBreakBars>10)
+      err="InpFalseBreakBars harus 0..10";
    else if(s.swingLookback<2 || s.swingLookback>50)
       err="InpSwingLookback harus 2..50";
    else if(s.retestMaxBars<1 || s.retestMaxBars>100)
@@ -1054,10 +1058,19 @@ void ProcessSession(const int s,const datetime nowBrk)
             break;
            }
          g_orb.RefreshStatus(s,r,g_data);
+         if(r.status==ORB_STATUS_INVALIDATED)
+           {
+            //--- v1.04: false-break selesai diproses → re-arm (satu kali per
+            //--- invalidasi; batasnya tetap akhir sesi & filter size hari itu)
+            g_sessions.SetOrStatus(s,ORB_STATUS_RANGING);
+            g_orb.Reset(s);
+            break;
+           }
          SBreakout bo;
          if(!g_orb.Assess(s,r,g_data,nowBrk,bo))
             break;
          g_lastBo[s]=bo;
+         g_sessions.MarkBreakout(s,bo.dir,bo.time,bo.closePrice);
          AdvanceState(s,HUNT_STATE_BREAKOUT_CONFIRMED);
          //--- konfluensi pada bar yang sama
          SSMCContext ctx;

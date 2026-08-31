@@ -182,6 +182,23 @@ public:
          return(false);
       return(SecondsToForceClose(session,nowBroker)<=0);
      }
+   /** v1.04 FIX: catat event breakout ke state INTERNAL sesi. Detektor
+       hanya menulis pada SALINAN SOpenRange milik caller, jadi tanpa ini
+       status internal tetap RANGING → monitor false-break & timer
+       barsSinceBreakout mati. Dipanggil main tepat setelah Assess emit. */
+   bool              MarkBreakout(const int session,const ENUM_HUNT_DIR dir,
+                                  const datetime t,const double px)
+     {
+      if(session<0||session>=HUNT_SESSION_COUNT)
+         return(false);
+      m_or[session].status=(dir==HUNT_DIR_BUY ? ORB_STATUS_BREAKOUT_UP
+                                              : ORB_STATUS_BREAKOUT_DOWN);
+      m_or[session].breakoutDir  =dir;
+      m_or[session].breakoutTime =t;
+      m_or[session].breakoutPrice=px;
+      m_or[session].barsSinceBreakout=0;
+      return(true);
+     }
    /** Re-arm status OR satu sesi (RANGING = breakout baru bisa di-emit). */
    bool              SetOrStatus(const int session,const ENUM_ORB_STATUS st)
      {
