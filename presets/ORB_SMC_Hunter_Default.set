@@ -32,6 +32,7 @@ InpRetestMaxBars=10
 InpMaxExtensionBeforeRetest=50.0
 InpLiqTolerancePips=2.0
 InpUseFVGAsZone=true
+InpSmcScopeDay=false
 InpOBDisplacementAtr=1.0
 InpSLBufferAtrMult=0.2
 InpATRPeriod=14

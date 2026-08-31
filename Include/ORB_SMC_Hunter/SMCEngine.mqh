@@ -225,11 +225,13 @@ private:
    void                BuildPools(const CDataService &data)
      {
       double tol=m_cfg.liqTolPips*data.PipSize();
-      if(tol<=0.0)
-         tol=data.Point()*5.0;
+      double atr0=data.Atr(0);
+      if(atr0>0.0 && tol<0.10*atr0)
+         tol=0.10*atr0;                          // floor non-FX (BTC/ETH/IDX)
       for(int i=0;i<m_swingCount;i++)
         {
-         double lv=m_swings[i].price;
+         double lv0=m_swings[i].price;            // anchor klaster (kanonik)
+         double lv=lv0,sum=lv0;
          int cnt=1;
          datetime t0=m_swings[i].time,t1=m_swings[i].time;
          int j=i+1;
@@ -237,10 +239,11 @@ private:
            {
             if(m_swings[j].type!=m_swings[i].type)
                break;
-            if(MathAbs(m_swings[j].price-lv)>tol)
+            if(MathAbs(m_swings[j].price-lv0)>tol)  // semua dlm tol ke ANCHOR
                break;
-            lv=(lv*cnt+m_swings[j].price)/(cnt+1);   // running mean
+            sum+=m_swings[j].price;
             cnt++;
+            lv=sum/cnt;                             // level pool = mean
             t1=m_swings[j].time;
            }
          if(cnt>=2)
@@ -743,6 +746,24 @@ public:
       for(int i=0;i<m_zoneCount;i++)
          if(m_zones[i].id==id)
             return(m_zones[i].state==HUNT_ZONE_ACTIVE);
+      return(false);
+     }
+   /** v1.06: zona searah dgn level snapshot plan masih HIDUP? Alive =
+       ACTIVE atau MITIGATED (tersentuh = mulai retest; INVALID = farCross/
+       terisi penuh/terpakai). Match tipe+geometri — rebuild deterministik
+       membuat level identik antar-rebuild, sedangkan zone.id BEROTASI. */
+   bool              ZoneStillActive(const ENUM_HUNT_DIR dir,const double bottom,
+                                     const double top) const
+     {
+      for(int i=0;i<m_zoneCount;i++)
+        {
+         const SZone z=m_zones[i];
+         if(z.state==HUNT_ZONE_INVALID || !ZoneDirMatches(z,dir))
+            continue;
+         double tolz=MathMax(1e-9,(MathAbs(top)+MathAbs(bottom))*1e-8);
+         if(MathAbs(z.bottom-bottom)<=tolz && MathAbs(z.top-top)<=tolz)
+            return(true);
+        }
       return(false);
      }
    /** Tandai zona terpakai entry — persist antar-rebuild (memo time). */

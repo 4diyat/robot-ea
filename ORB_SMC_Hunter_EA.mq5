@@ -24,7 +24,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.105"
+#property version     "1.106"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -65,6 +65,7 @@ input int                 InpRetestMaxBars   = 10;              // Maks bar menu
 input double              InpMaxExtensionBeforeRetest = 50.0;   // Ekstensi maks sebelum retest (% dari OR)
 input double              InpLiqTolerancePips = 2.0;            // Toleransi equal highs/lows (pips)
 input bool                InpUseFVGAsZone    = true;            // FVG boleh jadi zona retest
+input bool                InpSmcScopeDay     = false;           // Sweep/BOS/zona: false=jendela sesi, true=sejak awal hari broker
 input double              InpOBDisplacementAtr = 1.0;           // Displacement OB minimum (×ATR)
 input double              InpSLBufferAtrMult = 0.2;             // Buffer SL melampaui struktur (×ATR)
 input int                 InpATRPeriod       = 14;              // Periode ATR (buffer SL & volatilitas)
@@ -225,6 +226,7 @@ bool SnapshotSettings(SHunterSettings &s)
    s.maxExtensionPct      =InpMaxExtensionBeforeRetest;
    s.liqTolPips           =InpLiqTolerancePips;
    s.useFvgAsZone         =InpUseFVGAsZone;
+   s.smcScopeDay          =InpSmcScopeDay;
    s.slAtrMult            =InpSLBufferAtrMult;
    s.obDisplacementAtr    =InpOBDisplacementAtr;
    s.atrPeriod            =InpATRPeriod;
@@ -455,7 +457,8 @@ void FillSmcContext(const int s,const SOpenRange &r,const ENUM_HUNT_DIR dir,
                     const double price,SSMCContext &ctx)
   {
    ctx.htfBias=g_smc.HtfBias();
-   datetime since=r.sessionStart;
+   datetime since=(g_settings.smcScopeDay ? g_sessions.CurrentDayUtc()
+                                         : r.sessionStart);   // v1.06: opsi anchor hari
    ctx.sweptInDirection=g_smc.IsLiquiditySwept(dir,since);
    ctx.sweepTime=g_smc.LastSweepTime(dir);
    ctx.bosSinceSweep=g_smc.HasStructureShift(dir,(ctx.sweepTime>0 ? ctx.sweepTime : since));
@@ -1171,15 +1174,23 @@ void ProcessSession(const int s,const datetime nowBrk)
          g_orb.RefreshStatus(s,r,g_data);
          double px=(r.breakoutDir==HUNT_DIR_BUY ? g_data.Bid() : g_data.Ask());
          double ext=ExtensionPct(r,r.breakoutDir,px);
-         SSMCContext ctx2;
-         FillSmcContext(s,r,r.breakoutDir,px,ctx2);
+         //--- v1.06: cek ZONA MILIK PLAN SENDIRI (bukan proxy 'ada zona
+         //--- ACTIVE apa pun' — dulu itu membunuh retest di bar sentuh yg
+         //--- justru mengubah zona jadi MITIGATED, mematikan mode EXECUTION)
+         bool zoneGone=(g_plan[s].zoneTopSnap>0.0 &&
+                        !g_smc.ZoneStillActive(r.breakoutDir,g_plan[s].zoneBottomSnap,
+                                               g_plan[s].zoneTopSnap));
          if(r.status==ORB_STATUS_INVALIDATED ||
             r.barsSinceBreakout>g_settings.retestMaxBars ||
             ext>g_settings.maxExtensionPct ||
-            !g_conf.StillValid(g_plan[s],ctx2))
+            zoneGone)
            {
-            InvalidateSetup(s,(r.status==ORB_STATUS_INVALIDATED ? "false breakout" :
-                               "retest timeout/extension"));
+            string whyS="retest timeout/extension";
+            if(r.status==ORB_STATUS_INVALIDATED)
+               whyS="false breakout";
+            else if(zoneGone)
+               whyS="zona OB/FVG mati pra-fill";
+            InvalidateSetup(s,whyS);
             break;
            }
          if(g_settings.entryMode==ENTRY_EXECUTION)

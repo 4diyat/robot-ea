@@ -39,6 +39,7 @@ struct SHunterSettings
    double          maxExtensionPct;      // % dari OR sebelum retest = invalid
    double          liqTolPips;           // klaster equal highs/lows
    bool            useFvgAsZone;         // FVG boleh jadi zona retest
+   bool            smcScopeDay;          // anchor sweep/BOS/zona: hari(true)/sesi(false)
    double          slAtrMult;            // buffer SL melampaui struktur (×ATR)
    double          obDisplacementAtr;    // displacement OB minimal (× ATR)
    int             atrPeriod;
@@ -122,6 +123,7 @@ void SettingsDefaults(SHunterSettings &s)
    s.maxExtensionPct       = 50.0;
    s.liqTolPips            = 2.0;
    s.useFvgAsZone          = true;
+   s.smcScopeDay           = false;
    s.slAtrMult             = 0.2;
    s.obDisplacementAtr     = 1.0;
    s.atrPeriod             = 14;

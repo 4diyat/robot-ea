@@ -144,9 +144,12 @@ public:
       return(rep);
      }
 
-   /** Evaluasi ulang ringan fase WAIT_RETEST: zona masih hidup (panggilan
-       mengisi ctx.zoneFound via engine IsZoneActive(plan.zoneId)) &
-       extension belum lewat batas keras. Return false = setup invalid. */
+   /** [DEPRIKASI utk fase zona — v1.06] Pemeriksaan lama 'zona masih hidup'
+       lewat ctx.zoneFound proved WRONG: bar sentuh pertama menandai zona
+       MITIGATED → zoneFound false → retest mode EXECUTION ikut terbunuh.
+       Sejak v1.06 main memakai CSMCEngine::ZoneStillActive (geometri level
+       plan, alive=ACTIVE|MITIGATED) — zone.id sendiri tak stabil antar-
+       rebuild. Method dipertahankan utk kompatibilitas API. */
    bool              StillValid(const SSignalPlan &plan,const SSMCContext &smcNow) const
      {
       if(plan.zoneId!=0 && !smcNow.zoneFound)

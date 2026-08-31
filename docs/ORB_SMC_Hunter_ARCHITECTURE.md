@@ -35,6 +35,7 @@ Urutan include: `Defines → Settings → DataService → Session → ORB → SM
 | A5 | Prefix objek `HUNT_*` (bukan `ORBSMC_*`) + **ledger** nama objek | `OnDeinit`/rebuild tidak menabrak objek EA lain milik user | perlu ledger maintenance (di-renderer) |
 | A6 | Jam sesi default **UTC kanonik** (Asia 0–6, London 7–16, NY 12–20) + `InpTimeBase=UTC`; offset broker−UTC auto-ukur `InpAutoGmt` (TimeGMT) | benar di server timezone apa pun; drift musiman ±1 jam tetap ada (jam pasar fixed vs DST lokal) | user bisa switch basis BROKER + manual offset |
 | A7 | UTC internal via `HuntNowUtc()` (tester-aware) | `TimeGMT()` tak reliable di Strategy Tester → hasil auto-ukur di-clamp −12..14; di luar itu fallback `InpGMTOffset` (diuji saat OnInit) | — |
+| A8 | v1.06 SMC: guard `ZoneStillActive` (zona plan mati → setup invalid; match geometri krn `zone.id` berotasi tiap rebuild); opsi `InpSmcScopeDay` (anchor sweep/BOS/zona: sesi vs hari broker); floor toleransi likuiditas 10%×ATR (non-FX); klaster equal-H/L di-anchor ke swing pertama (kanonik) | deterministik, non-repaint; tanpa guard, pending bisa menunggu di level zona yang sudah INVALID sampai timeout | scope-hari = trade-off vs 'hanya struktur intra-sesi' — default OFF (perilaku lama) |
 
 ## 3. State machine (per sesi)
 
