@@ -25,7 +25,7 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 
 //=== EA identity =====================================================
 #define HUNT_NAME             "ORB_SMC_Hunter"
-#define HUNT_VERSION          "1.15"
+#define HUNT_VERSION          "1.16"
 
 //=== Prefix objek chart (1 per kategori render) ======================
 #define HUNT_PREFIX_OR        "HUNT_OR_"     // garis opening range per sesi
@@ -53,6 +53,10 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 #define HUNT_COL_BAND_ASIA_ON   C'14,42,64'
 #define HUNT_COL_BAND_LONDON_ON C'64,44,10'
 #define HUNT_COL_BAND_NY_ON     C'50,22,66'
+//--- v1.16: garis tepi kotak sesi (Opsi A)
+#define HUNT_COL_EDGE_ASIA      C'42,106,159'
+#define HUNT_COL_EDGE_LONDON    C'176,119,24'
+#define HUNT_COL_EDGE_NY        C'143,85,184'
 #define HUNT_COL_BULL         clrSeaGreen
 #define HUNT_COL_BEAR         clrIndianRed
 #define HUNT_COL_READY        clrLime

@@ -1,0 +1,87 @@
+<!DOCTYPE html><html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mockup — Band Sesi v1.13 vs Opsi Kotak Sederhana</title>
+<style>
+ body{background:#0b0e14;color:#cdd6e4;font-family:Consolas,monospace;margin:0;padding:18px}
+ h1{font-size:16px;color:#7fd4ff;margin:0 0 4px} h2{font-size:13px;margin:22px 0 6px;color:#e8b04a}
+ p{font-size:12px;line-height:1.5;color:#93a3b8;margin:4px 0}
+ canvas{display:block;width:100%;max-width:1000px;background:#131722;border:1px solid #232a38;border-radius:6px}
+ .tag{display:inline-block;font-size:10px;padding:1px 8px;border-radius:10px;margin-left:8px;border:1px solid #7fd4ff;color:#7fd4ff}
+ .rec{border-color:#35c46f;color:#35c46f}
+ ul{font-size:12px;color:#93a3b8;margin:6px 0;padding-left:18px}
+ code{color:#9fd0a0}
+</style></head><body>
+<h1>ORB_SMC_Hunter — rework band latar sesi (pra-implementasi)</h1>
+<p>Kondisi v1.13: <b>3 sesi × 4 hari = sampai 12 pita latar</b> — terasa ramai. Permintaan Anda: lebih simple,
+"seperti sebuah kotak saja yang diberi background". Sekarang jam chart <span class="tag">LONDON LIVE ± 10:30 broker</span>.</p>
+
+<h2>1 · KONDISI SEKARANG (v1.13)</h2>
+<p style="color:#66788e">12 pita solid; sesi live = warna fill lebih terang.</p><canvas id="c0" height="230"></canvas>
+
+<h2>2 · TERPASANG v1.16 — 3 kotak, hanya HARI INI <span class="tag rec">= mockup yang diimplementasikan</span></h2>
+<p>Fill solid gelap + <b>border tipis sewarna</b> + label kecil di tepi atas (<code>LONDON 08:00–16:00</code>).
+Sesi live = <b>border menebal + fill lebih terang</b> (pilihan Anda); tiap kotak berlabel 2 baris: nama+jam, H/L range &amp; status <code>Range/Breakout/Invalidated</code>. Kotak besok baru muncul saat rollover.</p>
+<canvas id="c1" height="230"></canvas>
+
+<h2>3 · OPSI B — SATU kotak: sesi yang SEDANG AKTIF saja</h2>
+<p>Chart paling bersih; hanya jendela live dilingkari. Trade-off: ritme sesi lain hari ini tidak terlihat.</p>
+<canvas id="c2" height="230"></canvas>
+
+<h2>Dampak implementasi (setelah Anda pilih)</h2>
+<ul>
+<li>Hanya <code>RenderSessionBands()</code> ditulis ulang: loop 4-hari → 1 kotak/sesi (+<code>OBJPROP_BORDER</code>… di MT5: border via garis tepi rectangle = <code>OBJPROP_COLOR</code> utk edge, <code>BGCOLOR</code> utk fill; label <code>OBJ_TEXT</code> font 7). <b>Logika trading nol perubahan.</b></li>
+<li>Objek chart turun dari ≤12 band → 3 (A) / 1 (B) + label; ledger &amp; prune tetap; input <code>InpShowSessionBands</code> tetap (Backtest preset: off).</li>
+<li>Varian warna "live terang" dihapus diganti border tebal (A) — atau tetap ada kalau Anda suka; sebutkan saja.</li>
+</ul>
+<script>
+const SESS=[
+ {n:"ASIA",a:1,b:8,fill:"#0a1a28",edge:"#2a6a9f",live:"#0e2a40"},
+ {n:"LONDON",a:8,b:16,fill:"#281c08",edge:"#b07718",live:"#402c0a"},
+ {n:"NEW YORK",a:16,b:21,fill:"#1e0e28",edge:"#8f55b8",live:"#32164a"}];
+const NOW=10.5,H=230,PAD=24;
+function rnd(s){return()=>{s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff}}
+function draw(id,mode){
+ const cv=document.getElementById(id),W=cv.parentElement.clientWidth-40;cv.width=W;
+ const g=cv.getContext('2d');g.fillStyle="#131722";g.fillRect(0,0,W,H);
+ const span=mode==0?96:24, t0=mode==0?NOW-84:0;      // v1.13: 3.5 hari ke belakang
+ const X=t=>PAD+((t-t0)/span)*(W-2*PAD);
+ // 1) band fill
+ const bands=[];
+ if(mode==0){for(let d=0;d<4;d++)for(const s of SESS)bands.push({s,t1:d*24+s.a,t2:d*24+s.b});}
+ else if(mode==1){for(const s of SESS)bands.push({s,t1:s.a,t2:s.b});}
+ else{for(const s of SESS)if(NOW>=s.a&&NOW<s.b)bands.push({s,t1:s.a,t2:s.b});}
+ for(const b of bands){
+   const live=NOW>=b.t1&&NOW<b.t2;
+   g.fillStyle=live?(mode==0?b.s.live:b.s.fill):b.s.fill;
+   g.fillRect(X(b.t1),14,X(b.t2)-X(b.t1),H-30);
+   if(mode>0){
+     if(live&&mode==1)g.fillStyle=b.s.live,g.fillRect(X(b.t1),14,X(b.t2)-X(b.t1),H-30);
+     g.strokeStyle=b.s.edge;g.lineWidth=live?2.5:1;
+     g.strokeRect(X(b.t1)+.5,14.5,X(b.t2)-X(b.t1)-1,H-31);
+     g.fillStyle=b.s.edge;g.font="10px Consolas";g.textAlign="center";
+     const cxm=(X(b.t1)+X(b.t2))/2;
+     g.fillText(b.s.n+"  "+String(b.s.a).padStart(2,"0")+":00-"+String(b.s.b).padStart(2,"0")+":00",cxm,10);
+     if(mode==1)g.fillText("H 1.08745  L 1.08512  |  "+(b.s.n=="LONDON"?"Breakout Up":"Range"),cxm,H-26);
+   }
+ }
+ // 2) grid jam
+ g.strokeStyle="#1d2330";g.fillStyle="#5a6678";g.font="9px Consolas";g.textAlign="center";
+ for(let hh=Math.ceil(t0/12)*12;hh<=t0+span;hh+=12){
+   g.beginPath();g.moveTo(X(hh),14);g.lineTo(X(hh),H-16);g.stroke();
+   g.fillText(String(((hh%24)+24)%24).padStart(2,"0")+":00",X(hh),H-4);}
+ // 3) candles
+ const r=rnd(7),n=Math.floor((W-2*PAD)/6);let px=56;
+ for(let i=0;i<n;i++){
+   const o=px,c=o+(r()-.5)*14,u=Math.max(o,c),dn=Math.min(o,c);
+   g.strokeStyle=g.fillStyle=c>o?"#26a69a":"#ef5350";
+   const cx=X(t0+span*i/n);
+   g.fillRect(cx-2,H-16-dn*1.6,4,(u-dn)*1.6+1);
+   g.beginPath();g.moveTo(cx,H-16-(dn+5)*1.6);g.lineTo(cx,H-16-(u+5)*1.6);g.stroke();
+   px=c;}
+ // 4) garis NOW
+ g.strokeStyle="#7fd4ff";g.setLineDash([4,3]);g.beginPath();g.moveTo(X(NOW),10);g.lineTo(X(NOW),H-18);g.stroke();g.setLineDash([]);
+ g.fillStyle="#7fd4ff";g.font="9px Consolas";g.textAlign="left";g.fillText("sekarang",X(NOW)+4,22);
+}
+draw("c0",0);draw("c1",1);draw("c2",2);
+addEventListener('resize',()=>{draw("c0",0);draw("c1",1);draw("c2",2)});
+</script></body></html>

@@ -24,7 +24,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.116"
+#property version     "1.117"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -1146,7 +1146,7 @@ void UpdatePerformanceSection(void)
 //+------------------------------------------------------------------+
 void RenderAllStaticLayers(const datetime nowBrk)
   {
-   g_visual.RenderSessionBands(g_sessions,nowBrk);
+   g_visual.RenderSessionBands(g_sessions,g_data,nowBrk);
    g_visual.RenderOpeningRanges(g_sessions,g_data,nowBrk);
    g_visual.RenderZones(g_smc,nowBrk);
    g_visual.RenderStructure(g_smc);
