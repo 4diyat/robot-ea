@@ -1843,6 +1843,15 @@ int OnInit()
      }
    if(g_settings.mode==HUNT_MODE_SWING)
       PrintFormat("%s | MODE=SWING: force-close OFF, retest>=40 bar, SL buffer>=0.5xAtr, minRR>=2.5, TP1>=1.5R, pending-exp>=48 jam. Posisi CARRY overnight — perhitungkan SWAP. Chart disarankan H1/H4.",HUNT_NAME);
+   //--- v1.16: sapu sisa objek band lama lintas-versi (nama lama
+   //--- HUNT_SESS_<s>_<t> dari v1.13) yg bisa tersimpan di template
+   //--- chart — prefix-targeted, BUKAN ObjectsDeleteAll global.
+   for(int oi=ObjectsTotal(0)-1;oi>=0;oi--)
+     {
+      string onm=ObjectName(0,oi);
+      if(StringFind(onm,HUNT_PREFIX_SESS)==0)
+         ObjectDelete(0,onm);
+     }
    return(INIT_SUCCEEDED);
   }
 
