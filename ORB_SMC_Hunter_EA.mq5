@@ -24,7 +24,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.117"
+#property version     "1.118"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -125,7 +125,7 @@ input group "=== Visual Settings ==="
 input bool                InpShowOB          = true;            // Order Block boxes
 input bool                InpShowFVG         = true;            // Fair Value Gap boxes
 input bool                InpShowStructure   = true;            // BOS/CHoCH + HH/HL/LH/LL
-input bool                InpShowSessionBands = true;           // Band latar jam sesi (Asia/London/NY) full-height
+input bool                InpShowSessionBands = true;           // Kotak outline sesi awal-akhir (v1.17: tanpa fill)
 input bool                InpShowSweep       = true;            // Liquidity sweep markers
 input bool                InpShowEntryArrows = true;            // Entry arrows + labels
 input bool                InpShowPivot       = true;            // Daily pivots PP/R/S

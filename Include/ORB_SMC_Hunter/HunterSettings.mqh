@@ -96,7 +96,7 @@ struct SHunterSettings
    bool            showOB;
    bool            showFvg;
    bool            showStructure;
-   bool            showSessionBands;   // v1.13: band latar per sesi
+   bool            showSessionBands;   // v1.17: kotak outline sesi (tanpa fill)
    bool            showSweep;
    bool            showEntryArrows;
    bool            showPivot;

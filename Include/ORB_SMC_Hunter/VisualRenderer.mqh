@@ -284,11 +284,13 @@ public:
      }
 
    //+---------------------------------------------------------------+
-   //| 0. Kotak sesi HARI INI (v1.16 — rework Opsi A, user-approved):  |
-   //| satu rectangle per sesi aktif: fill solid gelap + border tipis   |
-   //| sewarna + label 2-baris (nama & jam / H-L range & status). Sesi   |
-   //| live: border menebal DAN fill varian terang. Rebuild per bar via  |
-   //| ledger HUNT_LED_SESS; TANPA alpha; BACK=true → candle di depan.   |
+   //| 0. Kotak sesi AWAL-AKHIR (v1.17, Opsi A user — background warna  |
+   //| DIHAPUS): outline rectangle TANPA fill dari jam mulai s/d selesai   |
+   //| sesi; batas harga = high/low sesi hari ini (scan bar closed dari    |
+   //| cache CDataService — nol copy-rates tambahan, non-repaint          |
+   //| intra-bar). Sesi live: edge kanan mengikuti bar closed terakhir &    |
+   //| garis menebal. Label H/L + status OR di atas kotak; tooltip detail.  |
+   //| Garis tipis sewarna sesi (EDGE_*). Ledger HUNT_LED_SESS per bar.     |
    //+---------------------------------------------------------------+
    void              RenderSessionBands(const CSessionManager &sessions,const CDataService &data,
                                         const datetime nowBrk)
@@ -299,6 +301,7 @@ public:
       datetime day0=sessions.GetDayStartUtc();
       if(day0<=0)
          return;
+      int nbar=data.ClosedBars();
       for(int s=0;s<HUNT_SESSION_COUNT;s++)
         {
          if(!m_cfg.enableSession[s])
@@ -307,56 +310,72 @@ public:
          datetime t2=day0+m_cfg.endHourBrk[s]*3600;
          if(t2<=t1)
             t2+=86400;                         // wrap tengah malam
-         bool live=sessions.IsSessionLive(s,nowBrk);
-         color edge,fill;
+         if(t1>nowBrk)
+            continue;                          // sesi belum dimulai hari ini
+         //--- H/L sesi (bar closed, back=0 terbaru -> break saat keluar sesi)
+         double hi=0.0,lo=0.0;
+         datetime lastIn=0;
+         for(int b=0;b<nbar;b++)
+           {
+            MqlRates br;
+            if(!data.GetClosedBar(b,br))
+               break;
+            if(br.time<t1)
+               break;
+            if(br.time>=t2)
+               continue;                       // bar di luar jendela (sesi berikutnya)
+            if(hi<=0.0 || br.high>hi)
+               hi=br.high;
+            if(lo<=0.0 || br.low<lo)
+               lo=br.low;
+            if(lastIn==0 || br.time>lastIn)
+               lastIn=br.time;
+           }
+         if(hi<=0.0 || lo<=0.0 || lastIn==0)
+            continue;                          // belum ada bar closed dlm sesi
+         datetime right=lastIn+PeriodSeconds(); // tutup di tepi kanan bar terakhir
+         bool live=(nowBrk<t2);
+         color edge;
          if(s==HUNT_SESSION_ASIA)
-           {
             edge=HUNT_COL_EDGE_ASIA;
-            fill=(live ? HUNT_COL_BAND_ASIA_ON : HUNT_COL_BAND_ASIA);
-           }
          else if(s==HUNT_SESSION_LONDON)
-           {
             edge=HUNT_COL_EDGE_LONDON;
-            fill=(live ? HUNT_COL_BAND_LONDON_ON : HUNT_COL_BAND_LONDON);
-           }
          else
-           {
             edge=HUNT_COL_EDGE_NY;
-            fill=(live ? HUNT_COL_BAND_NY_ON : HUNT_COL_BAND_NY);
-           }
          string base=HUNT_PREFIX_SESS+IntegerToString((long)s);
          BaseObj(base,OBJ_RECTANGLE);
          ObjectSetInteger(0,base,OBJPROP_COLOR,edge);
-         ObjectSetInteger(0,base,OBJPROP_BGCOLOR,fill);
-         ObjectSetInteger(0,base,OBJPROP_FILL,true);
+         ObjectSetInteger(0,base,OBJPROP_FILL,false);
          ObjectSetInteger(0,base,OBJPROP_BACK,true);
+         ObjectSetInteger(0,base,OBJPROP_STYLE,STYLE_SOLID);
          ObjectSetInteger(0,base,OBJPROP_WIDTH,(live ? 2 : 1));
-         ObjectSetInteger(0,base,OBJPROP_ZORDER,-1);
-         ObjectSetDouble(0,base,OBJPROP_PRICE,0,1.0e8);
-         ObjectSetDouble(0,base,OBJPROP_PRICE,1,-1.0e8);
+         ObjectSetDouble(0,base,OBJPROP_PRICE,0,hi);
+         ObjectSetDouble(0,base,OBJPROP_PRICE,1,lo);
          ObjectSetInteger(0,base,OBJPROP_TIME,0,(long)t1);
-         ObjectSetInteger(0,base,OBJPROP_TIME,1,(long)t2);
+         ObjectSetInteger(0,base,OBJPROP_TIME,1,(long)right);
          LedgerAdd(HUNT_LED_SESS,base,0);
          Touch(base);
-         //--- label 2 baris: nama+jam ; H/L & status range sesi
-         string l2="H --  L --  | belum terbentuk";
+         //--- label: NAMA H/L | status ; tooltip detail
+         string st="Ranging";
          SOpenRange r;
          if(sessions.GetRange(s,r) && r.formed)
            {
-            string st="Range";
             if(r.status==ORB_STATUS_BREAKOUT_UP)
                st="Breakout Up";
             else if(r.status==ORB_STATUS_BREAKOUT_DOWN)
                st="Breakout Down";
             else if(r.status==ORB_STATUS_INVALIDATED)
                st="Invalidated";
-            l2=StringFormat("H %s  L %s  | %s",DoubleToString(r.high,data.Digits()),
-                            DoubleToString(r.low,data.Digits()),st);
            }
-         string txt=StringFormat("%s %02d:00-%02d:00\n%s",CSessionManager::SessionName(s),
-                                 m_cfg.startHourBrk[s],m_cfg.endHourBrk[s],l2);
-         DrawTextLabel(base+"lbl",t1,ChartGetDouble(0,CHART_PRICE_MAX),txt,edge,7,ANCHOR_UPPER,
+         string lab=StringFormat("%s  H %s  L %s  | %s",CSessionManager::SessionName(s),
+                                 DoubleToString(hi,data.Digits()),DoubleToString(lo,data.Digits()),st);
+         DrawTextLabel(base+"lbl",(datetime)((t1+right)/2),hi,lab,edge,7,ANCHOR_LOWER,
                        HUNT_LED_SESS,0);
+         string tip=StringFormat("%s %02d:00-%02d:00 broker\nH %s  L %s (%s)\nStatus OR: %s",
+                                 CSessionManager::SessionName(s),m_cfg.startHourBrk[s],
+                                 m_cfg.endHourBrk[s],DoubleToString(hi,data.Digits()),
+                                 DoubleToString(lo,data.Digits()),PipsStr(data,hi-lo),st);
+         ObjectSetString(0,base,OBJPROP_TOOLTIP,tip);
         }
      }
 
