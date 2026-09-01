@@ -34,6 +34,7 @@ struct SHunterSettings
    int             chochLookback;        // validasi CHoCH HTF (0=swingLookback)
    int             chochAlertMin;        // durasi alert CHoCH di dashboard
    bool            requireLiquiditySweep;
+   bool            requireHtfBias;         // v1.15: gate G2 bias HTF on/off
    bool            requireRetest;        // wajib retest zona (no direct entry)
    int             retestMaxBars;
    double          maxExtensionPct;      // % dari OR sebelum retest = invalid
@@ -123,6 +124,7 @@ void SettingsDefaults(SHunterSettings &s)
    s.chochLookback         = 0;
    s.chochAlertMin         = 60;
    s.requireLiquiditySweep = true;
+   s.requireHtfBias        = true;
    s.requireRetest         = true;
    s.retestMaxBars         = 10;
    s.maxExtensionPct       = 50.0;

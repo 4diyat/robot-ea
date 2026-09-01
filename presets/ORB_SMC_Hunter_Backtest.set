@@ -20,6 +20,7 @@ InpRangeMinutes=30
 InpMinRangePips=0.0
 InpBreakoutBufferPips=0.0
 InpRequireBodyClose=true
+InpRequireHtfBias=true
 InpFalseBreakBars=2
 InpSwingLookback=3
 InpRequireLiquiditySweep=true

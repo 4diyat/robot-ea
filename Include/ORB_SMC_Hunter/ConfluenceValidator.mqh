@@ -4,9 +4,9 @@
 //| Menerima PRIMITIF/snapshot (SBreakout, SSMCContext, flag) — tidak  |
 //| memanggil modul lain (loose coupling; EA utama yang merakit).      |
 //|                                                                  |
-//| Hard-gates (semua wajib): G1 breakout valid · G2 searah bias HTF   |
-//|  (bias None = TIDAK lolos) · G3 pool searah di-sweep (bila         |
-//|  requireLiquiditySweep) · G4 zona OB/FVG tersedia (requireRetest;  |
+//|  Hard-gates: G1 breakout valid · G2 bias HTF — v1.15: on/off via     |
+//|  requireHtfBias (default ON = perilaku lama) · G3 pool di-sweep      |
+//|  (requireLiquiditySweep) · G4 zona OB/FVG tersedia (requireRetest;   |
 //|  false = opt-in sadar entry-langsung, lihat docs) · G5 bebas window |
 //|  news (veto mutlak) · G6 spread · G7 risk-ok. v1.07 opt-in: +G3b    |
 //|  inducement · +G4b discount/premium — BOBOT SKOR TETAP 7 komponen.  |
@@ -119,12 +119,15 @@ public:
          AddReason(rep,"G5: window news aktif");
          return(rep);
         }
-      //--- G2 — bias HTF
-      if(smc.htfBias==HUNT_BIAS_NONE)
-         AddReason(rep,"G2: bias HTF belum terbentuk");
-      else if(!(bo.dir==HUNT_DIR_BUY && smc.htfBias==HUNT_BIAS_BULLISH) &&
-              !(bo.dir==HUNT_DIR_SELL && smc.htfBias==HUNT_BIAS_BEARISH))
-         AddReason(rep,"G2: arah vs bias HTF bentrok");
+      //--- G2 — bias HTF (v1.15: on/off via requireHtfBias; skor soft tak berubah)
+      if(m_cfg.requireHtfBias)
+        {
+         if(smc.htfBias==HUNT_BIAS_NONE)
+            AddReason(rep,"G2: bias HTF belum terbentuk");
+         else if(!(bo.dir==HUNT_DIR_BUY && smc.htfBias==HUNT_BIAS_BULLISH) &&
+                 !(bo.dir==HUNT_DIR_SELL && smc.htfBias==HUNT_BIAS_BEARISH))
+            AddReason(rep,"G2: arah vs bias HTF bentrok");
+        }
       //--- G3 — sweep
       if(m_cfg.requireLiquiditySweep && !smc.sweptInDirection)
          AddReason(rep,"G3: pool searah belum di-sweep");

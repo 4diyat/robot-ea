@@ -24,7 +24,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.115"
+#property version     "1.116"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -59,6 +59,7 @@ input group "=== SMC Settings ==="
 input int                 InpSwingLookback   = 3;               // Swing lookback kiri/kanan (bar closed)
 input int                 InpCHoCHSwingLookback = 0;            // Lookback validasi CHoCH HTF (0=InpSwingLookback)
 input int                 InpCHoCHAlertMinutes = 60;            // Baris alert CHoCH di dashboard (menit)
+input bool                InpRequireHtfBias  = true;          // G2: arah entry wajib searah bias HTF (off=counter-bias lolos gate)
 input bool                InpRequireLiquiditySweep = true;      // Wajib sweep pool searah breakout
 input bool                InpRequireFVGRetest = true;          // Wajib retest OB/FVG (false=opt-in entry langsung!)
 input int                 InpRetestMaxBars   = 10;              // Maks bar menunggu retest (invalidasi/expiry)
@@ -225,6 +226,7 @@ bool SnapshotSettings(SHunterSettings &s)
    s.chochLookback        = InpCHoCHSwingLookback;
    s.chochAlertMin        = MathMax(5,InpCHoCHAlertMinutes);
    s.perfLookbackDays     = MathMax(1,InpPerformanceLookbackDays);
+   s.requireHtfBias         =InpRequireHtfBias;
    s.requireLiquiditySweep=InpRequireLiquiditySweep;
    s.requireRetest        =InpRequireFVGRetest;
    s.retestMaxBars        =InpRetestMaxBars;
@@ -870,11 +872,12 @@ void UpdateChecklistRows(const int act,const datetime nowBrk)
    int   met=0;
    //--- 1. HTF bias searah arah setup
    ENUM_HUNT_BIAS b=g_smc.HtfBias();
-   bool c1=(hd && ((b==HUNT_BIAS_BULLISH && dir==HUNT_DIR_BUY) ||
+   bool c1=(hd && (!g_settings.requireHtfBias ||
+                   (b==HUNT_BIAS_BULLISH && dir==HUNT_DIR_BUY) ||
                    (b==HUNT_BIAS_BEARISH && dir==HUNT_DIR_SELL)));
    if(c1)
       met++;
-   DashChk(HUNT_DASH_CHK_BIAS,"HTF bias searah",hd,c1);
+   DashChk(HUNT_DASH_CHK_BIAS,(g_settings.requireHtfBias ? "HTF bias searah" : "HTF bias (gate off)"),hd,c1);
    //--- 2. liquidity sweep searah terkonfirmasi
    bool c2=(hd && g_lastCtx[act].sweptInDirection);
    if(c2)
