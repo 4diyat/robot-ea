@@ -24,7 +24,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.119"
+#property version     "1.120"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -125,7 +125,8 @@ input group "=== Visual Settings ==="
 input bool                InpShowOB          = true;            // Order Block boxes
 input bool                InpShowFVG         = true;            // Fair Value Gap boxes
 input bool                InpShowStructure   = true;            // BOS/CHoCH + HH/HL/LH/LL
-input bool                InpShowSessionBands = true;           // Kotak outline sesi awal-akhir (v1.17: tanpa fill)
+input bool                InpShowSessionBands = true;           // Kotak outline+fill sesi awal-akhir
+input bool                InpForceGridOff    = true;            // v1.19: paksa grid chart OFF saat EA attach (tab baru/tester ikut)
 input bool                InpShowSweep       = true;            // Liquidity sweep markers
 input bool                InpShowEntryArrows = true;            // Entry arrows + labels
 input bool                InpShowPivot       = true;            // Daily pivots PP/R/S
@@ -1855,6 +1856,11 @@ int OnInit()
       if(StringFind(onm,HUNT_PREFIX_SESS)==0)
          ObjectDelete(0,onm);
      }
+   //--- v1.19: opsi gaya chart — grid dimatikan SAAT INIT agar tab baru
+   //--- (template Default) tidak menghidupkan ulang grid; nonaktifkan via
+   //--- InpForceGridOff=false bila ingin grid tetap sesuai template Anda.
+   if(InpForceGridOff)
+      ChartSetInteger(0,CHART_SHOW_GRID,false);
    return(INIT_SUCCEEDED);
   }
 
