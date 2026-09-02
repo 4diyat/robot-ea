@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mockup v1.17 — Kotak Sesi TANPA background warna</title>
+<title>Mockup v1.18 — Kotak Sesi TANPA background warna</title>
 <style>
  body{background:#0b0e14;color:#cdd6e4;font-family:Consolas,monospace;margin:0;padding:18px}
  h1{font-size:16px;color:#7fd4ff;margin:0 0 4px} h2{font-size:13px;margin:22px 0 6px;color:#e8b04a}
@@ -11,12 +11,12 @@
  ul{font-size:12px;color:#93a3b8;margin:6px 0;padding-left:18px}
  code{color:#9fd0a0}
 </style></head><body>
-<h1>ORB_SMC_Hunter — rework v1.17: kotak awal→akhir sesi, TANPA background warna</h1>
-<p>Sesuai instruksi Anda: <b>seluruh fill/background berwarna DIHAPUS</b> di semua opsi di bawah.
+<h1>ORB_SMC_Hunter — v1.18: kotak awal→akhir sesi — latar solid HANYA di dalam kotak</h1>
+<p>Tepi chart tetap bersih (tidak ada pita full-height); latar gelap kini <b>hanya di dalam kotak sesi</b> sesuai permintaan.
 Sisa chart persis seperti sebelum v1.13 (candle + garis OR), ditambah KOTAK sesi. Sekarang <span class="tag">London ±10:30</span>.</p>
 
-<h2>OPSI A — kotak = jam sesi × rentang HIGH-LOW sesi <span class="tag rec">REKOMENDASI</span></h2>
-<p>Rectangle <b>outline saja</b> (garis tipis sewarna sesi, tanpa isi): kiri = awal sesi, kanan = akhir sesi,
+<h2>TERPASANG v1.18 — kotak jam sesi × H/L, outline + <b>fill di dalam kotak</b></h2>
+<p>Rectangle dengan <b>latar solid gelap di dalam kotak</b> (outline tipis sewarna sesi): kiri = awal sesi, kanan = akhir sesi,
 atas = high sesi hari ini, bawah = low sesi. Benar-benar "kotak" yang terlihat 4 sisinya.
 Sesi belum selesai → kotak memanjang sampai bar terakhir; live = garis menebal. Label kecil di atas kotak
 (bisa dihapus — lihat pertanyaan).</p>
@@ -39,9 +39,9 @@ perilaku: on = kotak, off = tidak ada), preset Backtest off tetap.</li>
 </ul>
 <script>
 const SESS=[
- {n:"ASIA",a:1,b:8,edge:"#2a6a9f",hi:58,lo:34},
- {n:"LONDON",a:8,b:16,edge:"#b07718",hi:74,lo:40},
- {n:"NEW YORK",a:16,b:21,edge:"#8f55b8",hi:82,lo:52}];
+ {n:"ASIA",a:1,b:8,edge:"#2a6a9f",hi:58,lo:34,fill:"#081420",live:"#0c2438"},
+ {n:"LONDON",a:8,b:16,edge:"#b07718",hi:74,lo:40,fill:"#1e1506",live:"#342408"},
+ {n:"NEW YORK",a:16,b:21,edge:"#8f55b8",hi:82,lo:52,fill:"#180b20",live:"#2a1238"}];
 const NOW=10.5,H=240,PAD=24;
 function rnd(s){return()=>{s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff}}
 function draw(id,mode){
@@ -67,6 +67,8 @@ function draw(id,mode){
    const t2=live?NOW:s.b;
    g.strokeStyle=s.edge;g.lineWidth=live?2:1;
    if(mode=="A"){
+     g.fillStyle=live?s.live:s.fill;
+     g.fillRect(X(s.a),Y(s.hi),X(t2)-X(s.a),Y(s.lo)-Y(s.hi));
      g.strokeRect(X(s.a)+.5,Y(s.hi)+.5,X(t2)-X(s.a)-1,Y(s.lo)-Y(s.hi)-1);
      g.fillStyle=s.edge;g.font="10px Consolas";g.textAlign="center";
      g.fillText(s.n+"  H "+String(s.hi+110).slice(0,4)+"  L "+String(s.lo+110).slice(0,4)+"  |  "+(live?"Breakout Up":(t2<12?"Range":"Range")),

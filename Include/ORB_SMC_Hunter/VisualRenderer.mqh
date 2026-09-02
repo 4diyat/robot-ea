@@ -284,8 +284,8 @@ public:
      }
 
    //+---------------------------------------------------------------+
-   //| 0. Kotak sesi AWAL-AKHIR (v1.17, Opsi A user — background warna  |
-   //| DIHAPUS): outline rectangle TANPA fill dari jam mulai s/d selesai   |
+   //| 0. Kotak sesi AWAL-AKHIR (v1.17 outline; v1.18 + fill DI DALAM   |
+   //| kotak): outline + latar solid HANYA di dalam kotak H/L sesi       |
    //| sesi; batas harga = high/low sesi hari ini (scan bar closed dari    |
    //| cache CDataService — nol copy-rates tambahan, non-repaint          |
    //| intra-bar). Sesi live: edge kanan mengikuti bar closed terakhir &    |
@@ -335,14 +335,37 @@ public:
             continue;                          // belum ada bar closed dlm sesi
          datetime right=lastIn+PeriodSeconds(); // tutup di tepi kanan bar terakhir
          bool live=(nowBrk<t2);
-         color edge;
+         color edge,fillCol;
          if(s==HUNT_SESSION_ASIA)
+           {
             edge=HUNT_COL_EDGE_ASIA;
+            fillCol=(live ? HUNT_COL_BOX_FILL_ASIA_ON : HUNT_COL_BOX_FILL_ASIA);
+           }
          else if(s==HUNT_SESSION_LONDON)
+           {
             edge=HUNT_COL_EDGE_LONDON;
+            fillCol=(live ? HUNT_COL_BOX_FILL_LONDON_ON : HUNT_COL_BOX_FILL_LONDON);
+           }
          else
+           {
             edge=HUNT_COL_EDGE_NY;
+            fillCol=(live ? HUNT_COL_BOX_FILL_NY_ON : HUNT_COL_BOX_FILL_NY);
+           }
          string base=HUNT_PREFIX_SESS+IntegerToString((long)s);
+         //--- v1.18: latar DI DALAM kotak — fill solid gelap, back=true
+         string bg=base+"bg";
+         BaseObj(bg,OBJ_RECTANGLE);
+         ObjectSetInteger(0,bg,OBJPROP_COLOR,fillCol);
+         ObjectSetInteger(0,bg,OBJPROP_BGCOLOR,fillCol);
+         ObjectSetInteger(0,bg,OBJPROP_FILL,true);
+         ObjectSetInteger(0,bg,OBJPROP_BACK,true);
+         ObjectSetInteger(0,bg,OBJPROP_ZORDER,-1);
+         ObjectSetDouble(0,bg,OBJPROP_PRICE,0,hi);
+         ObjectSetDouble(0,bg,OBJPROP_PRICE,1,lo);
+         ObjectSetInteger(0,bg,OBJPROP_TIME,0,(long)t1);
+         ObjectSetInteger(0,bg,OBJPROP_TIME,1,(long)right);
+         LedgerAdd(HUNT_LED_SESS,bg,0);
+         Touch(bg);
          BaseObj(base,OBJ_RECTANGLE);
          ObjectSetInteger(0,base,OBJPROP_COLOR,edge);
          ObjectSetInteger(0,base,OBJPROP_FILL,false);

@@ -24,7 +24,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "ORB SMC Hunter"
 #property link        ""
-#property version     "1.118"
+#property version     "1.119"
 #property description "ORB+SMC modular EA | retest-only entry | per-session force-close | news fail-safe"
 
 #include <ORB_SMC_Hunter\HunterDefines.mqh>
@@ -1643,9 +1643,9 @@ void RealtimeTick()
       if(g_settings.newsEnabled)
         {
          if(!ns.hasData)
-            newsLine="News: NO DATA (filter nonaktif!)";
+            newsLine=(ns.err!="" ? "News: NO DATA — "+ns.err : "News: NO DATA");
          else if(ns.stale)
-            newsLine="News: STALE (fetch gagal)";
+            newsLine=(ns.err!="" ? "News: STALE — "+ns.err : "News: STALE (fetch gagal)");
          else if(ns.blockedNow)
             newsLine="News: BLOCK — "+ns.blockedEvent;
          else if(ns.nextEventUtc>0)
@@ -1814,6 +1814,9 @@ int OnInit()
          g_visual.RenderNews(g_news,TimeCurrent());
          g_visual.Finish();
         }
+      else
+         PrintFormat("%s | NEWS BELUM TERSEDIA — cek 1) '%s' terdaftar di Tools>Options>Expert Advisors>Allow WebRequest, 2) koneksi internet terminal. Retry otomatis tiap %d jam; status live ada di baris NEWS dashboard.",
+                     HUNT_NAME,g_settings.newsUrlBase,g_settings.newsRefreshHours);
      }
    else if(g_settings.newsEnabled)
       PrintFormat("%s | news filter TANPA DATA di tester — entry tidak diblokir kalender",

@@ -552,6 +552,7 @@ public:
                 (nowBrk-m_lastFetchBrk)>m_cfg.newsCacheMaxAgeHours*3600);
       st.blockedNow=false;
       st.blockedEvent="";
+      st.err=(m_hasData ? "" : m_lastError);
       st.lastFetchUtc=0;
       st.nextEventUtc=0;
       st.eventCount=m_count;

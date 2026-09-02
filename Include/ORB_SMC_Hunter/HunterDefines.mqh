@@ -25,7 +25,7 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 
 //=== EA identity =====================================================
 #define HUNT_NAME             "ORB_SMC_Hunter"
-#define HUNT_VERSION          "1.17"
+#define HUNT_VERSION          "1.18"
 
 //=== Prefix objek chart (1 per kategori render) ======================
 #define HUNT_PREFIX_OR        "HUNT_OR_"     // garis opening range per sesi
@@ -46,6 +46,13 @@ string HUNT_Trim(string s)     { StringTrimLeft(s); StringTrimRight(s); return(s
 #define HUNT_COL_ASIA         clrDodgerBlue
 #define HUNT_COL_LONDON       clrOrange
 #define HUNT_COL_NY           clrMediumOrchid
+//--- v1.18: fill LATAR di DALAM kotak sesi (solid gelap, tanpa alpha) + varian live
+#define HUNT_COL_BOX_FILL_ASIA      C'8,20,32'
+#define HUNT_COL_BOX_FILL_LONDON    C'30,21,6'
+#define HUNT_COL_BOX_FILL_NY        C'24,11,32'
+#define HUNT_COL_BOX_FILL_ASIA_ON   C'12,36,56'
+#define HUNT_COL_BOX_FILL_LONDON_ON C'52,36,8'
+#define HUNT_COL_BOX_FILL_NY_ON     C'42,18,56'
 //--- v1.16: garis tepi kotak sesi (Opsi A)
 #define HUNT_COL_EDGE_ASIA      C'42,106,159'
 #define HUNT_COL_EDGE_LONDON    C'176,119,24'
@@ -502,6 +509,7 @@ struct SNewsStatus
    datetime          lastFetchUtc;
    datetime          nextEventUtc;
    string            nextInfo;        // v1.14: "CUR HH:MM title — desc" utk dashboard
+   string            err;             // v1.18: penyebab fetch gagal (utk dashboard)
    int               eventCount;      // relevan hari ini ( utk render )
   };
 
