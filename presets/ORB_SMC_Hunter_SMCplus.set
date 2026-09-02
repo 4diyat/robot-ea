@@ -1,0 +1,100 @@
+; ORB_SMC_Hunter v1.07 — preset SMC+ (demo/live): breaker, inducement,
+; discount-zone, TP-likuiditas AKTIF. Bila sinyal terlalu sepi, turunkan
+; InpMinConfluenceScore (60→55) sebelum melonggarkan gate lain.
+; Semua sesi aktif, EntryMode=PENDING_ORDER(1), news ON, visual lengkap.
+; Catatan: jam sesi = UTC kanonik (Asia 0-6, London 7-16, NY 12-20); offset
+; broker-UTC auto-ukur (InpAutoGmt=true), InpGMTOffset fallback utk tester.
+; enum: InpTimeBase 0=broker 1=UTC 2=AUTO-DST | InpRiskBase 0=balance 1=equity
+;       InpEntryMode 0=Execution 1=PendingOrder | InpDashboardCorner 0..3 (ENUM_BASE_CORNER)
+
+;--- Session
+InpEnableAsia=true
+InpAsiaStart=0
+InpAsiaEnd=6
+InpEnableLondon=true
+InpLondonStart=7
+InpLondonEnd=16
+InpEnableNY=true
+InpNYStart=12
+InpNYEnd=20
+InpTimeBase=1
+InpGMTOffset=2
+InpAutoGmt=true
+;--- ORB
+InpRangeMinutes=30
+InpMinRangePips=0.0
+InpBreakoutBufferPips=0.0
+InpRequireBodyClose=true
+InpRequireHtfBias=true
+InpFalseBreakBars=2
+;--- SMC
+InpSwingLookback=3
+InpRequireLiquiditySweep=true
+InpRequireFVGRetest=true
+InpRetestMaxBars=10
+InpMaxExtensionBeforeRetest=50.0
+InpLiqTolerancePips=2.0
+InpUseFVGAsZone=true
+InpSmcScopeDay=false
+InpUseBreakerBlocks=true
+InpRequireInducement=true
+InpRequireDiscountZone=true
+InpTpLiquidity=true
+InpOBDisplacementAtr=1.0
+InpSLBufferAtrMult=0.2
+InpATRPeriod=14
+InpHTFTimeframe=16388
+;--- Confluence
+InpMinConfluenceScore=60
+;--- Entry
+InpEntryMode=1
+;--- Risk
+InpRiskPercent=0.5
+InpRiskBase=0
+InpMinRR=2.0
+InpTP1RR=1.0
+InpPartialClosePct=50.0
+InpTrailAfterTP1=true
+InpMaxTradesPerDay=3
+InpMaxDailyLossPercent=3.0
+InpForceCloseMinutesBeforeEnd=30
+InpMaxSpreadPips=0.0
+InpMaxSlippagePoints=30
+InpPipSizeOverride=0.0
+InpOrderRetries=3
+InpOrderRetryDelayMs=500
+InpPendingExpireHours=24
+InpLotMode=1
+InpFixedLots=0.01
+InpMode=0
+InpSwingCloseOnOppChoch=1
+;--- OB/OS (dashboard)
+InpOBOSPeriod=14
+InpOBOSUpperLevel=70.0
+InpOBOSLowerLevel=30.0
+;--- News
+InpEnableNewsFilter=true
+InpNewsRefreshHours=6
+InpIncludeMediumImpact=true
+InpNewsCurrencyOverride=
+InpNewsBufferBeforeMin=30
+InpNewsBufferAfterMin=30
+InpNewsFetchTimeoutMs=8000
+InpNewsCacheMaxAgeHours=48
+InpNewsTzShiftMin=0
+InpNewsUrlBase=https://sslecal2.investing.com
+;--- Visual
+InpShowOB=true
+InpShowFVG=true
+InpShowStructure=true
+InpShowSweep=true
+InpShowEntryArrows=true
+InpShowPivot=true
+InpShowVolumeProfile=true
+InpShowNewsMarkers=true
+;--- General
+InpMagicNumber=20260830
+InpShowDashboard=true
+InpShowSessionBands=true
+InpDashboardCorner=0
+InpDashboardFontSize=9
