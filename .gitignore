@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Pipeline DL_Signal_EA: data historis & hasil training tidak di-commit
+ml/data/
+ml/artifacts/

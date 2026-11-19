@@ -1,0 +1,28 @@
+# Library Python untuk pipeline training DL_Signal_EA
+#
+# Pasang (dari folder ml/):
+#   python -m venv .venv
+#   source .venv/bin/activate          # Windows: .venv\Scripts\activate
+#   pip install -r requirements.txt
+#
+# Diuji pada Python 3.11 dengan versi di kolom "diuji". Batas bawah (>=) adalah
+# versi minimum yang diperlukan kode; versi yang lebih baru seharusnya jalan,
+# tetapi bila ekspor ONNX bermasalah, pasang persis versi "diuji".
+
+# --- Deep learning ---------------------------------------------- diuji
+tensorflow>=2.16      # training model (TCN / CNN-LSTM)            2.21.0
+keras>=3.0            # API model & dataset (ikut terpasang         3.15.1
+                      # bersama tensorflow; dicantumkan karena
+                      # diimpor langsung)
+
+# --- Ekspor & verifikasi ONNX (model untuk MT5) ---------------
+tf2onnx>=1.17         # konversi Keras -> ONNX                     1.17.0
+onnx>=1.16            # format file ONNX (dipakai tf2onnx)         1.23.2
+onnxruntime>=1.18     # cek hasil ONNX == Keras                    1.31.1
+
+# --- Data ------------------------------------------------------
+numpy>=1.26           # komputasi fitur, label, backtest           2.4.6
+pandas>=2.0           # baca CSV MT5, rolling window               3.1.1
+
+# --- Test ------------------------------------------------------
+pytest>=7.0           # python -m pytest -q                        9.2.0

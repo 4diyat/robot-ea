@@ -159,6 +159,20 @@ Folder `docs/` berisi mock-up tampilan chart (replika warna/format asli, bukan s
 - `dashboard-preview.png` — close-up panel dashboard 4 section
 - `entry-modes-preview.png` — perbandingan Pending Order vs Execution
 
+## 10. EA kedua: DL_Signal_EA (deep learning, TensorFlow → ONNX)
+
+EA terpisah yang tidak bergantung pada modul ORB/SMC di atas: model TensorFlow (TCN / CNN-LSTM) dilatih pada data historis, diekspor ke ONNX, lalu dijalankan di MT5 untuk menghasilkan sinyal BUY/SELL per bar.
+
+```
+DL_Signal_EA.mq5               ← EA: fitur → inferensi ONNX → sinyal → order
+Include/DL_Signal_EA/          ← DLDefines, DLFeatureEngine, DLModel, DLRisk, DLTrade
+Scripts/DL_ExportHistory.mq5   ← ekspor OHLCV (+ fitur versi MQL5 untuk uji paritas)
+ml/                            ← pipeline Python: train.py, check_parity.py, dlea/, tests/
+presets/DL_Signal_EA_Default.set
+```
+
+Arsitektur, langkah penerapan, hasil verifikasi, dan keterbatasannya: **[docs/DL_Signal_EA.md](docs/DL_Signal_EA.md)**. Kode MQL5-nya belum di-compile dan modelnya belum pernah dilatih pada data pasar nyata.
+
 ---
 
 **Disclaimer:** EA ini alat bantu, bukan jaminan profit. Uji di akun demo minimal 1–2 bulan sebelum live; pantau `InpMaxDailyLossPercent` dan ukuran risiko Anda.

@@ -1,0 +1,24 @@
+; DL_Signal_EA v1.00 — Preset DEFAULT (nilai bawaan input EA)
+; Format .set MQL5 (enum = nilai numerik)
+; CATATAN: untuk trading, muat preset DL_Signal_EA.set yang dibuat ml/train.py di folder
+; keluaran training — InpTimeframe/InpLookback/InpProbThreshold/InpSLAtr/InpTPAtr/InpMaxHoldBars
+; di sana sudah disesuaikan dengan model yang dilatih.
+
+InpModelFile=dl_signal_model.onnx
+InpModelInCommonFolder=false
+InpTimeframe=15
+InpLookback=64
+InpProbThreshold=0.55
+InpProbMargin=0.05
+InpSLAtr=1.5
+InpTPAtr=1.5
+InpMaxHoldBars=8
+InpCloseOnOpposite=false
+InpRiskPercent=0.5
+InpMaxDailyLossPercent=3.0
+InpMaxTradesPerDay=10
+InpMaxSpreadPctOfSL=10.0
+InpMaxSlippagePoints=30
+InpMagicNumber=20261113
+InpShowPanel=true
+InpVerboseLog=true
